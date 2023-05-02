@@ -10,13 +10,11 @@ Features:
 
 ## 使用方法
 
-安装
 ```bash
+# 从源码安装
 > go install github.com/faceair/clash-speedtest
-```
 
-运行参数
-```bash
+# 查看帮助
 > clash-speedtest -h
 Usage of clash-speedtest:
   -c string
@@ -27,9 +25,7 @@ Usage of clash-speedtest:
         download size for testing proxies (default 104857600)
   -t duration
         timeout for testing proxies (default 5s)
-```
 
-```bash
 # 测试全部节点
 > clash-speedtest -c ~/.config/clash/config.yaml
 ProxyName              	Bandwidth 	ResponseTime
@@ -56,5 +52,3 @@ ProxyName              	Bandwidth 	ResponseTime
 ## License
 
 [MIT](LICENSE)
-
-[
