@@ -2,13 +2,14 @@
 
 基于 Clash 核心的测速工具，快速测试你的 Clash 节点速度。
 
+<img width="880" alt="image" src="https://user-images.githubusercontent.com/3659110/235965223-35500dd7-45d1-4481-a11d-d6636ff24bff.png">
+
+
 Features:
 1. 无需额外的配置，直接将 Clash 配置文件地址作为参数传入即可
 2. 支持 Proxy 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Clash 一致
 3. 不依赖额外的 Clash 实例，单一进程即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
-
-<img width="907" alt="image" src="https://user-images.githubusercontent.com/3659110/235856244-1a55b1c7-31c5-4663-a123-bb64c5b63503.png">
 
 ## 使用方法
 
