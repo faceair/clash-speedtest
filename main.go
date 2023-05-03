@@ -10,13 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/provider"
 	C "github.com/Dreamacro/clash/constant"
-	providerTypes "github.com/Dreamacro/clash/constant/provider"
 	"github.com/Dreamacro/clash/log"
 	"gopkg.in/yaml.v3"
 )
@@ -44,48 +44,33 @@ func main() {
 
 	C.SetConfig(*configPathConfig)
 
-	cfg, err := LoadConfig()
+	proxies, err := loadProxies()
 	if err != nil {
 		log.Fatalln("Failed to load config: %s", err)
 	}
 
-	fmt.Printf("%-30s\t%-10s\t%-12s\n", "ProxyName", "Bandwidth", "ResponseTime")
+	fmt.Printf("%-30s\t%-10s\t%-12s\n", "节点", "带宽", "延迟")
 
-	for _, proxy := range cfg.Proxies {
+	proxyList := make([]string, 0, len(proxies))
+	for name := range proxies {
+		if filterRe.MatchString(name) {
+			proxyList = append(proxyList, name)
+		}
+	}
+	sort.Strings(proxyList)
+
+	for _, name := range proxyList {
+		proxy := proxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-			if filterRe.MatchString(proxy.Name()) {
-				name := formatName(proxy.Name())
-				result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
-				fmt.Printf("%-30s\t%-10s\t%-12s\n", name, formatBandwidth(result.Bandwidth), formatMillseconds(result.ResponseTime))
-			}
+			result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
+			fmt.Printf("%-30s\t%-10s\t%-12s\n", formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
 			continue
 		default:
 			log.Fatalln("Unsupported proxy type: %s", proxy.Type())
 		}
 	}
-	for _, provider := range cfg.Providers {
-		for _, proxy := range provider.Proxies() {
-			switch proxy.Type() {
-			case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-				if filterRe.MatchString(proxy.Name()) {
-					name := fmt.Sprintf("[%s] %s", provider.Name(), formatName(proxy.Name()))
-					result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
-					fmt.Printf("%-30s\t%-10s\t%-12s\n", name, formatBandwidth(result.Bandwidth), formatMillseconds(result.ResponseTime))
-				}
-			case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
-				continue
-			default:
-				log.Fatalln("Unsupported proxy type: %s", proxy.Type())
-			}
-		}
-	}
-}
-
-type Config struct {
-	Proxies   map[string]C.Proxy
-	Providers map[string]providerTypes.ProxyProvider
 }
 
 type RawConfig struct {
@@ -93,7 +78,7 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func LoadConfig() (*Config, error) {
+func loadProxies() (map[string]C.Proxy, error) {
 	buf, err := os.ReadFile(C.Path.Config())
 	if err != nil {
 		return nil, err
@@ -105,7 +90,6 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	proxies := make(map[string]C.Proxy)
-	providers := make(map[string]providerTypes.ProxyProvider)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
@@ -131,14 +115,16 @@ func LoadConfig() (*Config, error) {
 		if err := pd.Initial(); err != nil {
 			return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 		}
-		providers[name] = pd
+		for _, proxy := range pd.Proxies() {
+			proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = proxy
+		}
 	}
-	return &Config{proxies, providers}, nil
+	return proxies, nil
 }
 
 type Result struct {
-	Bandwidth    float64
-	ResponseTime time.Duration
+	Bandwidth float64
+	TTFB      time.Duration
 }
 
 func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
@@ -161,19 +147,19 @@ func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 	start := time.Now()
 	resp, err := client.Get(fmt.Sprintf("https://speed.cloudflare.com/__down?bytes=%d", downloadSize))
 	if err != nil {
-		return &Result{-1, 0}
+		return &Result{-1, -1}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return &Result{-1, 0}
+		return &Result{-1, -1}
 	}
-	responseTime := time.Since(start)
+	ttfb := time.Since(start)
 
 	io.Copy(io.Discard, resp.Body)
-	downloadTime := time.Since(start) - responseTime
+	downloadTime := time.Since(start) - ttfb
 	bandwidth := float64(downloadSize) / downloadTime.Seconds()
 
-	return &Result{bandwidth, responseTime}
+	return &Result{bandwidth, ttfb}
 }
 
 var (
@@ -213,5 +199,8 @@ func formatBandwidth(v float64) string {
 }
 
 func formatMillseconds(v time.Duration) string {
+	if v <= 0 {
+		return "N/A"
+	}
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
 }
