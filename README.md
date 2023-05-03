@@ -12,7 +12,7 @@ Features:
 
 ```bash
 # 从源码安装
-> go install github.com/faceair/clash-speedtest
+> go install github.com/faceair/clash-speedtest@latest
 
 # 查看帮助
 > clash-speedtest -h
