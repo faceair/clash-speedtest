@@ -153,7 +153,11 @@ func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 	}
 	ttfb := time.Since(start)
 
-	io.Copy(io.Discard, resp.Body)
+	written, _ := io.Copy(io.Discard, resp.Body)
+	if written == 0 {
+		return &Result{-1, -1}
+	}
+	downloadSize = int(written)
 	downloadTime := time.Since(start) - ttfb
 	bandwidth := float64(downloadSize) / downloadTime.Seconds()
 
