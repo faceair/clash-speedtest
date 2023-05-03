@@ -38,10 +38,7 @@ func main() {
 		currentDir, _ := os.Getwd()
 		*configPathConfig = filepath.Join(currentDir, *configPathConfig)
 	}
-	filterRe := regexp.MustCompile(*filterRegexConfig)
-
 	C.SetHomeDir(os.TempDir())
-
 	C.SetConfig(*configPathConfig)
 
 	proxies, err := loadProxies()
@@ -49,22 +46,23 @@ func main() {
 		log.Fatalln("Failed to load config: %s", err)
 	}
 
-	fmt.Printf("%-30s\t%-10s\t%-12s\n", "节点", "带宽", "延迟")
-
-	proxyList := make([]string, 0, len(proxies))
+	filterRegexp := regexp.MustCompile(*filterRegexConfig)
+	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
-		if filterRe.MatchString(name) {
-			proxyList = append(proxyList, name)
+		if filterRegexp.MatchString(name) {
+			filteredProxies = append(filteredProxies, name)
 		}
 	}
-	sort.Strings(proxyList)
+	sort.Strings(filteredProxies)
+	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
 
-	for _, name := range proxyList {
+	fmt.Printf(format, "节点", "带宽", "延迟")
+	for _, name := range filteredProxies {
 		proxy := proxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
 			result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
-			fmt.Printf("%-30s\t%-10s\t%-12s\n", formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
 			continue
 		default:
@@ -164,14 +162,12 @@ func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 
 var (
 	emojiRegex = regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{1F1E0}-\x{1F1FF}]`)
-	pipeRegex  = regexp.MustCompile(`\|.*`)
 	spaceRegex = regexp.MustCompile(`\s{2,}`)
 )
 
 func formatName(name string) string {
 	noEmoji := emojiRegex.ReplaceAllString(name, "")
-	noPipe := pipeRegex.ReplaceAllString(noEmoji, "")
-	mergedSpaces := spaceRegex.ReplaceAllString(noPipe, " ")
+	mergedSpaces := spaceRegex.ReplaceAllString(noEmoji, " ")
 	return strings.TrimSpace(mergedSpaces)
 }
 
