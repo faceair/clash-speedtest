@@ -6,7 +6,7 @@
 
 
 Features:
-1. 无需额外的配置，直接将 Clash 配置文件地址作为参数传入即可
+1. 无需额外的配置，直接将 Clash 配置本地文件路径或者订阅地址作为参数传入即可
 2. 支持 Proxy 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Clash 一致
 3. 不依赖额外的 Clash 实例，单一进程即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
@@ -14,14 +14,14 @@ Features:
 ## 使用方法
 
 ```bash
-# 从源码安装
+# 推荐从源码安装
 > go install github.com/faceair/clash-speedtest
 
 # 查看帮助
 > clash-speedtest -h
 Usage of clash-speedtest:
   -c string
-        specify configuration file
+        configuration file path, also support http(s) url
   -f string
         filter proxies by name, use regexp (default ".*")
   -output string
@@ -29,16 +29,18 @@ Usage of clash-speedtest:
   -size int
         download size for testing proxies (default 104857600)
   -sort string
-        sort field for testing proxies, b for bandwidth, t for TTFB
+        sort field for testing proxies, b for bandwidth, t for TTFB (default "b")
   -timeout duration
         timeout for testing proxies (default 5s)
 
 # 测试全部节点
 > clash-speedtest -c ~/.config/clash/config.yaml
-节点                     带宽         延迟
-[GroupName] US 01      	26.13MB/s 	1173.00ms
-[GroupName] US 02     	51.30MB/s 	3051.00ms
-[GroupName] US 03      	26.49MB/s 	1226.00ms
+节点                                        	带宽          	延迟
+Premium|广港|IEPL|01                        	484.80KB/s  	815.00ms
+Premium|广港|IEPL|02                        	N/A         	N/A
+Premium|广港|IEPL|03                        	2.62MB/s    	333.00ms
+Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
+Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 # 测试香港节点，使用正则表达式过滤即可
 > clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港'
