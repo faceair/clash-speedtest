@@ -113,20 +113,6 @@ func generateResultList(name string, result *Result, speedTestSlice []Result4Ord
 	return speedTestSlice
 }
 
-func sortAndPrintResult(speedTestSlice []Result4Order, format string) {
-	if *sortField == "t" {
-		sort.Slice(speedTestSlice, sortByTTFB(speedTestSlice))
-	} else {
-		sort.Slice(speedTestSlice, sortByBandWidth(speedTestSlice))
-	}
-
-	fmt.Println("===输出排序结果===")
-	fmt.Printf(format, "节点", "带宽", "延迟")
-	for _, result := range speedTestSlice {
-		fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
-	}
-}
-
 func filterProxies(proxies map[string]ClashConfig.Proxy) []string {
 	filterRegexp := regexp.MustCompile(*filterRegexConfig)
 	filteredProxies := make([]string, 0, len(proxies))
@@ -288,7 +274,7 @@ func writeToCsv(slice []Result4Order) {
 		return
 	}
 	for _, result := range slice {
-		csvWriter.Write([]string{formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB)})
+		err := csvWriter.Write([]string{formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB)})
 		if err != nil {
 			log.Infoln("write data error:%v", err)
 		}
