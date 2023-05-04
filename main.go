@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
@@ -16,7 +17,7 @@ import (
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/provider"
-	C "github.com/Dreamacro/clash/constant"
+	ClashConfig "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/log"
 	"gopkg.in/yaml.v3"
 )
@@ -26,7 +27,27 @@ var (
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
 	downloadSizeConfig = flag.Int("s", 1024*1024*100, "download size for testing proxies")
 	timeoutConfig      = flag.Duration("t", time.Second*5, "timeout for testing proxies")
+	sortField          = flag.String("S", "b", "sort field for testing proxies,b for bandwidth,t for TTFB")
+
+	emojiRegex = regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{1F1E0}-\x{1F1FF}]`)
+	spaceRegex = regexp.MustCompile(`\s{2,}`)
 )
+
+type Result struct {
+	Bandwidth float64
+	TTFB      time.Duration
+}
+
+type Result4Order struct {
+	Name      string
+	Bandwidth float64
+	TTFB      time.Duration
+}
+
+type RawConfig struct {
+	Providers map[string]map[string]any `yaml:"proxy-providers"`
+	Proxies   []map[string]any          `yaml:"proxies"`
+}
 
 func main() {
 	flag.Parse()
@@ -38,14 +59,75 @@ func main() {
 		currentDir, _ := os.Getwd()
 		*configPathConfig = filepath.Join(currentDir, *configPathConfig)
 	}
-	C.SetHomeDir(os.TempDir())
-	C.SetConfig(*configPathConfig)
+	ClashConfig.SetHomeDir(os.TempDir())
+	ClashConfig.SetConfig(*configPathConfig)
 
 	proxies, err := loadProxies()
 	if err != nil {
 		log.Fatalln("Failed to load config: %s", err)
 	}
+	//根据正则表达式过滤代理节点
+	filteredProxies := filterProxies(proxies)
 
+	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
+	var speedTestSlice []Result4Order
+
+	fmt.Printf(format, "节点", "带宽", "延迟")
+	for _, name := range filteredProxies {
+		proxy := proxies[name]
+		switch proxy.Type() {
+		case ClashConfig.Shadowsocks, ClashConfig.ShadowsocksR, ClashConfig.Snell, ClashConfig.Socks5, ClashConfig.Http, ClashConfig.Vmess, ClashConfig.Trojan:
+			result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
+			speedTestSlice = generateResultList(name, result, speedTestSlice)
+
+			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+		case ClashConfig.Direct, ClashConfig.Reject, ClashConfig.Relay, ClashConfig.Selector, ClashConfig.Fallback, ClashConfig.URLTest, ClashConfig.LoadBalance:
+			continue
+		default:
+			log.Fatalln("Unsupported proxy type: %s", proxy.Type())
+		}
+	}
+
+	if *sortField == "t" {
+		sort.Slice(speedTestSlice, sortByTTFB(speedTestSlice))
+	} else {
+		sort.Slice(speedTestSlice, sortByBandWidth(speedTestSlice))
+	}
+
+	fmt.Println("===输出排序结果===")
+	fmt.Printf(format, "节点", "带宽", "延迟")
+	for _, result := range speedTestSlice {
+		fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+	}
+
+	writeToCsv(speedTestSlice)
+}
+
+func generateResultList(name string, result *Result, speedTestSlice []Result4Order) []Result4Order {
+	result4Order := Result4Order{
+		Name:      name,
+		Bandwidth: result.Bandwidth,
+		TTFB:      result.TTFB,
+	}
+	speedTestSlice = append(speedTestSlice, result4Order)
+	return speedTestSlice
+}
+
+func sortAndPrintResult(speedTestSlice []Result4Order, format string) {
+	if *sortField == "t" {
+		sort.Slice(speedTestSlice, sortByTTFB(speedTestSlice))
+	} else {
+		sort.Slice(speedTestSlice, sortByBandWidth(speedTestSlice))
+	}
+
+	fmt.Println("===输出排序结果===")
+	fmt.Printf(format, "节点", "带宽", "延迟")
+	for _, result := range speedTestSlice {
+		fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+	}
+}
+
+func filterProxies(proxies map[string]ClashConfig.Proxy) []string {
 	filterRegexp := regexp.MustCompile(*filterRegexConfig)
 	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
@@ -54,30 +136,11 @@ func main() {
 		}
 	}
 	sort.Strings(filteredProxies)
-	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
-
-	fmt.Printf(format, "节点", "带宽", "延迟")
-	for _, name := range filteredProxies {
-		proxy := proxies[name]
-		switch proxy.Type() {
-		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-			result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
-			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
-		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
-			continue
-		default:
-			log.Fatalln("Unsupported proxy type: %s", proxy.Type())
-		}
-	}
+	return filteredProxies
 }
 
-type RawConfig struct {
-	Providers map[string]map[string]any `yaml:"proxy-providers"`
-	Proxies   []map[string]any          `yaml:"proxies"`
-}
-
-func loadProxies() (map[string]C.Proxy, error) {
-	buf, err := os.ReadFile(C.Path.Config())
+func loadProxies() (map[string]ClashConfig.Proxy, error) {
+	buf, err := os.ReadFile(ClashConfig.Path.Config())
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +150,7 @@ func loadProxies() (map[string]C.Proxy, error) {
 	if err := yaml.Unmarshal(buf, rawCfg); err != nil {
 		return nil, err
 	}
-	proxies := make(map[string]C.Proxy)
+	proxies := make(map[string]ClashConfig.Proxy)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
@@ -120,12 +183,7 @@ func loadProxies() (map[string]C.Proxy, error) {
 	return proxies, nil
 }
 
-type Result struct {
-	Bandwidth float64
-	TTFB      time.Duration
-}
-
-func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
+func TestProxy(proxy ClashConfig.Proxy, downloadSize int, timeout time.Duration) *Result {
 	client := http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
@@ -134,7 +192,7 @@ func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 				if err != nil {
 					return nil, err
 				}
-				return proxy.DialContext(ctx, &C.Metadata{
+				return proxy.DialContext(ctx, &ClashConfig.Metadata{
 					Host:    host,
 					DstPort: port,
 				})
@@ -163,11 +221,6 @@ func TestProxy(proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 
 	return &Result{bandwidth, ttfb}
 }
-
-var (
-	emojiRegex = regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{1F1E0}-\x{1F1FF}]`)
-	spaceRegex = regexp.MustCompile(`\s{2,}`)
-)
 
 func formatName(name string) string {
 	noEmoji := emojiRegex.ReplaceAllString(name, "")
@@ -203,4 +256,42 @@ func formatMillseconds(v time.Duration) string {
 		return "N/A"
 	}
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
+}
+
+func sortByBandWidth(speedTestSlice []Result4Order) func(i int, j int) bool {
+	return func(i, j int) bool {
+		return speedTestSlice[i].Bandwidth >= speedTestSlice[j].Bandwidth
+	}
+}
+
+func sortByTTFB(speedTestSlice []Result4Order) func(i int, j int) bool {
+	return func(i, j int) bool {
+		return speedTestSlice[i].TTFB <= speedTestSlice[j].TTFB
+	}
+}
+
+func writeToCsv(slice []Result4Order) {
+	fileName := "./result.csv"
+	os.Remove(fileName)
+	csvFile, err := os.Create(fileName)
+	if err != nil {
+		log.Infoln("create csv file error:%v", err)
+	}
+	defer csvFile.Close()
+	//写入UTF-8 BOM头
+	csvFile.WriteString("\xEF\xBB\xBF")
+
+	csvWriter := csv.NewWriter(csvFile)
+	err = csvWriter.Write([]string{"节点", "带宽", "延迟"})
+	if err != nil {
+		log.Infoln("write error:%v", err)
+		return
+	}
+	for _, result := range slice {
+		csvWriter.Write([]string{formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB)})
+		if err != nil {
+			log.Infoln("write data error:%v", err)
+		}
+	}
+	csvWriter.Flush()
 }
