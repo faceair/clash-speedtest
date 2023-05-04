@@ -2,7 +2,7 @@
 
 基于 Clash 核心的测速工具，快速测试你的 Clash 节点速度。
 
-<img width="880" alt="image" src="https://user-images.githubusercontent.com/3659110/235965223-35500dd7-45d1-4481-a11d-d6636ff24bff.png">
+<img width="801" alt="image" src="https://user-images.githubusercontent.com/3659110/236233818-d149c5a9-8e62-437f-8c67-55341984184d.png">
 
 
 Features:
