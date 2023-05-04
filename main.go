@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,9 +26,10 @@ import (
 var (
 	configPathConfig   = flag.String("c", "", "specify configuration file")
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
-	downloadSizeConfig = flag.Int("s", 1024*1024*100, "download size for testing proxies")
-	timeoutConfig      = flag.Duration("t", time.Second*5, "timeout for testing proxies")
-	sortField          = flag.String("S", "b", "sort field for testing proxies,b for bandwidth,t for TTFB")
+	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
+	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
+	sortField          = flag.String("sort", "", "sort field for testing proxies, b for bandwidth, t for TTFB")
+	output             = flag.String("output", "", "output result to csv file")
 )
 
 type Result struct {
@@ -58,11 +60,11 @@ func main() {
 	if err != nil {
 		log.Fatalln("Failed to load config: %s", err)
 	}
-	//根据正则表达式过滤代理节点
-	filteredProxies := filterProxies(proxies)
+
+	filteredProxies := filterProxies(*filterRegexConfig, proxies)
+	results := make([]Result, 0, len(filteredProxies))
 
 	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
-	var speedTestSlice []Result
 
 	fmt.Printf(format, "节点", "带宽", "延迟")
 	for _, name := range filteredProxies {
@@ -70,12 +72,8 @@ func main() {
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
 			result := TestProxy(name, proxy, *downloadSizeConfig, *timeoutConfig)
-
-			result.Name = name
-			speedTestSlice = append(speedTestSlice, *result)
-			speedTestSlice = speedTestSlice
-
 			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+			results = append(results, *result)
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
 			continue
 		default:
@@ -83,23 +81,34 @@ func main() {
 		}
 	}
 
-	if *sortField == "t" {
-		sort.Slice(speedTestSlice, sortByTTFB(speedTestSlice))
-	} else {
-		sort.Slice(speedTestSlice, sortByBandWidth(speedTestSlice))
+	if *sortField != "" {
+		switch *sortField {
+		case "b", "bandwidth":
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].Bandwidth > results[j].Bandwidth
+			})
+			fmt.Println("\n\n===结果按照带宽排序===")
+		case "t", "ttfb":
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].TTFB < results[j].TTFB
+			})
+			fmt.Println("\n\n===结果按照延迟排序===")
+		default:
+			log.Fatalln("Unsupported sort field: %s", *sortField)
+		}
+		fmt.Printf(format, "节点", "带宽", "延迟")
+		for _, result := range results {
+			fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+		}
 	}
 
-	fmt.Println("===输出排序结果===")
-	fmt.Printf(format, "节点", "带宽", "延迟")
-	for _, result := range speedTestSlice {
-		fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+	if *output != "" {
+		writeToCSV(*output, results)
 	}
-
-	writeToCsv(speedTestSlice)
 }
 
-func filterProxies(proxies map[string]C.Proxy) []string {
-	filterRegexp := regexp.MustCompile(*filterRegexConfig)
+func filterProxies(filter string, proxies map[string]C.Proxy) []string {
+	filterRegexp := regexp.MustCompile(filter)
 	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
 		if filterRegexp.MatchString(name) {
@@ -186,9 +195,8 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 	if written == 0 {
 		return &Result{name, -1, -1}
 	}
-	downloadSize = int(written)
 	downloadTime := time.Since(start) - ttfb
-	bandwidth := float64(downloadSize) / downloadTime.Seconds()
+	bandwidth := float64(written) / downloadTime.Seconds()
 
 	return &Result{name, bandwidth, ttfb}
 }
@@ -234,40 +242,32 @@ func formatMillseconds(v time.Duration) string {
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
 }
 
-func sortByBandWidth(speedTestSlice []Result) func(i int, j int) bool {
-	return func(i, j int) bool {
-		return speedTestSlice[i].Bandwidth >= speedTestSlice[j].Bandwidth
-	}
-}
-
-func sortByTTFB(speedTestSlice []Result) func(i int, j int) bool {
-	return func(i, j int) bool {
-		return speedTestSlice[i].TTFB <= speedTestSlice[j].TTFB
-	}
-}
-
-func writeToCsv(slice []Result) {
-	fileName := "./result.csv"
-	os.Remove(fileName)
-	csvFile, err := os.Create(fileName)
+func writeToCSV(filePath string, results []Result) error {
+	csvFile, err := os.Create(filePath)
 	if err != nil {
-		log.Infoln("create csv file error:%v", err)
+		return err
 	}
 	defer csvFile.Close()
-	//写入UTF-8 BOM头
+
+	// 写入 UTF-8 BOM 头
 	csvFile.WriteString("\xEF\xBB\xBF")
 
 	csvWriter := csv.NewWriter(csvFile)
-	err = csvWriter.Write([]string{"节点", "带宽", "延迟"})
+	err = csvWriter.Write([]string{"节点", "带宽 (MB/s)", "延迟 (ms)"})
 	if err != nil {
-		log.Infoln("write error:%v", err)
-		return
+		return err
 	}
-	for _, result := range slice {
-		err := csvWriter.Write([]string{formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB)})
+	for _, result := range results {
+		line := []string{
+			result.Name,
+			fmt.Sprintf("%.2f", result.Bandwidth/1024/1024),
+			strconv.FormatInt(result.TTFB.Milliseconds(), 10),
+		}
+		err := csvWriter.Write(line)
 		if err != nil {
-			log.Infoln("write data error:%v", err)
+			return err
 		}
 	}
 	csvWriter.Flush()
+	return nil
 }

@@ -15,7 +15,7 @@ Features:
 
 ```bash
 # 从源码安装
-> go install github.com/faceair/clash-speedtest@latest
+> go install github.com/faceair/clash-speedtest
 
 # 查看帮助
 > clash-speedtest -h
@@ -24,9 +24,13 @@ Usage of clash-speedtest:
         specify configuration file
   -f string
         filter proxies by name, use regexp (default ".*")
-  -s int
+  -output string
+        output result to csv file
+  -size int
         download size for testing proxies (default 104857600)
-  -t duration
+  -sort string
+        sort field for testing proxies, b for bandwidth, t for TTFB
+  -timeout duration
         timeout for testing proxies (default 5s)
 
 # 测试全部节点
