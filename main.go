@@ -28,15 +28,9 @@ var (
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
 	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
-	sortField          = flag.String("sort", "", "sort field for testing proxies, b for bandwidth, t for TTFB")
+	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv file")
 )
-
-type Result struct {
-	Name      string
-	Bandwidth float64
-	TTFB      time.Duration
-}
 
 type RawConfig struct {
 	Providers map[string]map[string]any `yaml:"proxy-providers"`
@@ -64,15 +58,15 @@ func main() {
 	filteredProxies := filterProxies(*filterRegexConfig, proxies)
 	results := make([]Result, 0, len(filteredProxies))
 
-	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
+	format := "%s%-42s\t%-12s\t%-12s\033[0m\n"
 
-	fmt.Printf(format, "节点", "带宽", "延迟")
+	fmt.Printf(format, "", "节点", "带宽", "延迟")
 	for _, name := range filteredProxies {
 		proxy := proxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
 			result := TestProxy(name, proxy, *downloadSizeConfig, *timeoutConfig)
-			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+			result.Printf(format)
 			results = append(results, *result)
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
 			continue
@@ -96,9 +90,9 @@ func main() {
 		default:
 			log.Fatalln("Unsupported sort field: %s", *sortField)
 		}
-		fmt.Printf(format, "节点", "带宽", "延迟")
+		fmt.Printf(format, "", "节点", "带宽", "延迟")
 		for _, result := range results {
-			fmt.Printf(format, formatName(result.Name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
+			result.Printf(format)
 		}
 	}
 
@@ -161,6 +155,27 @@ func loadProxies() (map[string]C.Proxy, error) {
 		}
 	}
 	return proxies, nil
+}
+
+type Result struct {
+	Name      string
+	Bandwidth float64
+	TTFB      time.Duration
+}
+
+var (
+	red   = "\033[31m"
+	green = "\033[32m"
+)
+
+func (r *Result) Printf(format string) {
+	color := ""
+	if r.Bandwidth < 1024*1024 {
+		color = red
+	} else if r.Bandwidth > 1024*1024*10 {
+		color = green
+	}
+	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMillseconds(r.TTFB))
 }
 
 func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
