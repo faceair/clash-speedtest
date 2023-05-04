@@ -17,7 +17,7 @@ import (
 
 	"github.com/Dreamacro/clash/adapter"
 	"github.com/Dreamacro/clash/adapter/provider"
-	ClashConfig "github.com/Dreamacro/clash/constant"
+	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/log"
 	"gopkg.in/yaml.v3"
 )
@@ -28,17 +28,9 @@ var (
 	downloadSizeConfig = flag.Int("s", 1024*1024*100, "download size for testing proxies")
 	timeoutConfig      = flag.Duration("t", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("S", "b", "sort field for testing proxies,b for bandwidth,t for TTFB")
-
-	emojiRegex = regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{1F1E0}-\x{1F1FF}]`)
-	spaceRegex = regexp.MustCompile(`\s{2,}`)
 )
 
 type Result struct {
-	Bandwidth float64
-	TTFB      time.Duration
-}
-
-type Result4Order struct {
 	Name      string
 	Bandwidth float64
 	TTFB      time.Duration
@@ -59,8 +51,8 @@ func main() {
 		currentDir, _ := os.Getwd()
 		*configPathConfig = filepath.Join(currentDir, *configPathConfig)
 	}
-	ClashConfig.SetHomeDir(os.TempDir())
-	ClashConfig.SetConfig(*configPathConfig)
+	C.SetHomeDir(os.TempDir())
+	C.SetConfig(*configPathConfig)
 
 	proxies, err := loadProxies()
 	if err != nil {
@@ -70,18 +62,21 @@ func main() {
 	filteredProxies := filterProxies(proxies)
 
 	format := fmt.Sprintf("%%-32s\t%%-12s\t%%-12s\n")
-	var speedTestSlice []Result4Order
+	var speedTestSlice []Result
 
 	fmt.Printf(format, "节点", "带宽", "延迟")
 	for _, name := range filteredProxies {
 		proxy := proxies[name]
 		switch proxy.Type() {
-		case ClashConfig.Shadowsocks, ClashConfig.ShadowsocksR, ClashConfig.Snell, ClashConfig.Socks5, ClashConfig.Http, ClashConfig.Vmess, ClashConfig.Trojan:
-			result := TestProxy(proxy, *downloadSizeConfig, *timeoutConfig)
-			speedTestSlice = generateResultList(name, result, speedTestSlice)
+		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
+			result := TestProxy(name, proxy, *downloadSizeConfig, *timeoutConfig)
+
+			result.Name = name
+			speedTestSlice = append(speedTestSlice, *result)
+			speedTestSlice = speedTestSlice
 
 			fmt.Printf(format, formatName(name), formatBandwidth(result.Bandwidth), formatMillseconds(result.TTFB))
-		case ClashConfig.Direct, ClashConfig.Reject, ClashConfig.Relay, ClashConfig.Selector, ClashConfig.Fallback, ClashConfig.URLTest, ClashConfig.LoadBalance:
+		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
 			continue
 		default:
 			log.Fatalln("Unsupported proxy type: %s", proxy.Type())
@@ -103,17 +98,7 @@ func main() {
 	writeToCsv(speedTestSlice)
 }
 
-func generateResultList(name string, result *Result, speedTestSlice []Result4Order) []Result4Order {
-	result4Order := Result4Order{
-		Name:      name,
-		Bandwidth: result.Bandwidth,
-		TTFB:      result.TTFB,
-	}
-	speedTestSlice = append(speedTestSlice, result4Order)
-	return speedTestSlice
-}
-
-func filterProxies(proxies map[string]ClashConfig.Proxy) []string {
+func filterProxies(proxies map[string]C.Proxy) []string {
 	filterRegexp := regexp.MustCompile(*filterRegexConfig)
 	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
@@ -125,8 +110,8 @@ func filterProxies(proxies map[string]ClashConfig.Proxy) []string {
 	return filteredProxies
 }
 
-func loadProxies() (map[string]ClashConfig.Proxy, error) {
-	buf, err := os.ReadFile(ClashConfig.Path.Config())
+func loadProxies() (map[string]C.Proxy, error) {
+	buf, err := os.ReadFile(C.Path.Config())
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +121,7 @@ func loadProxies() (map[string]ClashConfig.Proxy, error) {
 	if err := yaml.Unmarshal(buf, rawCfg); err != nil {
 		return nil, err
 	}
-	proxies := make(map[string]ClashConfig.Proxy)
+	proxies := make(map[string]C.Proxy)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
@@ -169,7 +154,7 @@ func loadProxies() (map[string]ClashConfig.Proxy, error) {
 	return proxies, nil
 }
 
-func TestProxy(proxy ClashConfig.Proxy, downloadSize int, timeout time.Duration) *Result {
+func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
 	client := http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
@@ -178,7 +163,7 @@ func TestProxy(proxy ClashConfig.Proxy, downloadSize int, timeout time.Duration)
 				if err != nil {
 					return nil, err
 				}
-				return proxy.DialContext(ctx, &ClashConfig.Metadata{
+				return proxy.DialContext(ctx, &C.Metadata{
 					Host:    host,
 					DstPort: port,
 				})
@@ -189,24 +174,29 @@ func TestProxy(proxy ClashConfig.Proxy, downloadSize int, timeout time.Duration)
 	start := time.Now()
 	resp, err := client.Get(fmt.Sprintf("https://speed.cloudflare.com/__down?bytes=%d", downloadSize))
 	if err != nil {
-		return &Result{-1, -1}
+		return &Result{name, -1, -1}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return &Result{-1, -1}
+		return &Result{name, -1, -1}
 	}
 	ttfb := time.Since(start)
 
 	written, _ := io.Copy(io.Discard, resp.Body)
 	if written == 0 {
-		return &Result{-1, -1}
+		return &Result{name, -1, -1}
 	}
 	downloadSize = int(written)
 	downloadTime := time.Since(start) - ttfb
 	bandwidth := float64(downloadSize) / downloadTime.Seconds()
 
-	return &Result{bandwidth, ttfb}
+	return &Result{name, bandwidth, ttfb}
 }
+
+var (
+	emojiRegex = regexp.MustCompile(`[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{1F1E0}-\x{1F1FF}]`)
+	spaceRegex = regexp.MustCompile(`\s{2,}`)
+)
 
 func formatName(name string) string {
 	noEmoji := emojiRegex.ReplaceAllString(name, "")
@@ -244,19 +234,19 @@ func formatMillseconds(v time.Duration) string {
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
 }
 
-func sortByBandWidth(speedTestSlice []Result4Order) func(i int, j int) bool {
+func sortByBandWidth(speedTestSlice []Result) func(i int, j int) bool {
 	return func(i, j int) bool {
 		return speedTestSlice[i].Bandwidth >= speedTestSlice[j].Bandwidth
 	}
 }
 
-func sortByTTFB(speedTestSlice []Result4Order) func(i int, j int) bool {
+func sortByTTFB(speedTestSlice []Result) func(i int, j int) bool {
 	return func(i, j int) bool {
 		return speedTestSlice[i].TTFB <= speedTestSlice[j].TTFB
 	}
 }
 
-func writeToCsv(slice []Result4Order) {
+func writeToCsv(slice []Result) {
 	fileName := "./result.csv"
 	os.Remove(fileName)
 	csvFile, err := os.Create(fileName)
