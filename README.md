@@ -1,15 +1,14 @@
 # Clash-SpeedTest
 
-基于 Clash 核心的测速工具，快速测试你的 Clash 节点速度。
-
-<img width="801" alt="image" src="https://user-images.githubusercontent.com/3659110/236233818-d149c5a9-8e62-437f-8c67-55341984184d.png">
-
+基于 Clash 核心的测速工具，快速测试你的节点速度。
 
 Features:
 1. 无需额外的配置，直接将 Clash 配置本地文件路径或者订阅地址作为参数传入即可
-2. 支持 Proxy 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Clash 一致
-3. 不依赖额外的 Clash 实例，单一进程即可完成测试
+2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Clash 一致
+3. 不依赖额外的 Clash 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
+
+<img width="801" alt="image" src="https://user-images.githubusercontent.com/3659110/236233818-d149c5a9-8e62-437f-8c67-55341984184d.png">
 
 ## 使用方法
 
@@ -33,17 +32,17 @@ Usage of clash-speedtest:
   -timeout duration
         timeout for testing proxies (default 5s)
 
-# 测试全部节点
-> > clash-speedtest -c 'https://domain.com/link/hash?clash=1'
+# 演示：
+# 1. 测试全部节点，使用 HTTP 订阅地址
+> clash-speedtest -c 'https://domain.com/link/hash?clash=1'
+# 2. 测试香港节点，使用正则表达式过滤，使用本地文件
+> clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港'
 节点                                        	带宽          	延迟
 Premium|广港|IEPL|01                        	484.80KB/s  	815.00ms
 Premium|广港|IEPL|02                        	N/A         	N/A
 Premium|广港|IEPL|03                        	2.62MB/s    	333.00ms
 Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
 Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
-
-# 测试香港节点，使用正则表达式过滤即可
-> clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港'
 ```
 
 ## 速度测试原理
