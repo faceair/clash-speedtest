@@ -34,7 +34,7 @@ Usage of clash-speedtest:
         timeout for testing proxies (default 5s)
 
 # 测试全部节点
-> clash-speedtest -c ~/.config/clash/config.yaml
+> > clash-speedtest -c 'https://domain.com/link/hash?clash=1'
 节点                                        	带宽          	延迟
 Premium|广港|IEPL|01                        	484.80KB/s  	815.00ms
 Premium|广港|IEPL|02                        	N/A         	N/A
