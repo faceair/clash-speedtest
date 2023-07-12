@@ -32,7 +32,7 @@ var (
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv file")
-	count              = flag.Int("count", 4, "download concurrent size")
+	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
 )
 
 type RawConfig struct {
@@ -84,7 +84,7 @@ func main() {
 		proxy := proxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-			result := TestProxyConcurrent(name, proxy, *downloadSizeConfig, *timeoutConfig, *count)
+			result := TestProxyConcurrent(name, proxy, *downloadSizeConfig, *timeoutConfig, *concurrent)
 			result.Printf(format)
 			results = append(results, *result)
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
@@ -197,18 +197,18 @@ func (r *Result) Printf(format string) {
 	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMillseconds(r.TTFB))
 }
 
-func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, count int) *Result {
-	if count <= 0 {
-		count = 1
+func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, concurrentCount int) *Result {
+	if concurrentCount <= 0 {
+		concurrentCount = 1
 	}
 
-	chunkSize := downloadSize / count
+	chunkSize := downloadSize / concurrentCount
 	totalTTFB := int64(0)
 	downloaded := int64(0)
 
 	var wg sync.WaitGroup
 	start := time.Now()
-	for i := 0; i < count; i++ {
+	for i := 0; i < concurrentCount; i++ {
 		wg.Add(1)
 		go func(i int) {
 			result, w := TestProxy(name, proxy, chunkSize, timeout)
@@ -225,7 +225,7 @@ func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout t
 	result := &Result{
 		Name:      name,
 		Bandwidth: float64(downloaded) / downloadTime.Seconds(),
-		TTFB:      time.Duration(totalTTFB / int64(count)),
+		TTFB:      time.Duration(totalTTFB / int64(concurrentCount)),
 	}
 
 	return result
