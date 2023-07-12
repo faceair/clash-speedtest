@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Dreamacro/clash/adapter"
@@ -30,6 +32,7 @@ var (
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv file")
+	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
 )
 
 type RawConfig struct {
@@ -54,7 +57,7 @@ func main() {
 			log.Fatalln("Failed to read config: %s", err)
 		}
 		*configPathConfig = filepath.Join(os.TempDir(), "clash_config.yaml")
-		if err := os.WriteFile(*configPathConfig, body, 0644); err != nil {
+		if err := os.WriteFile(*configPathConfig, body, 0o644); err != nil {
 			log.Fatalln("Failed to write config: %s", err)
 		}
 	}
@@ -81,7 +84,7 @@ func main() {
 		proxy := proxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-			result := TestProxy(name, proxy, *downloadSizeConfig, *timeoutConfig)
+			result := TestProxyConcurrent(name, proxy, *downloadSizeConfig, *timeoutConfig, *concurrent)
 			result.Printf(format)
 			results = append(results, *result)
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
@@ -194,7 +197,41 @@ func (r *Result) Printf(format string) {
 	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMillseconds(r.TTFB))
 }
 
-func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) *Result {
+func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, concurrentCount int) *Result {
+	if concurrentCount <= 0 {
+		concurrentCount = 1
+	}
+
+	chunkSize := downloadSize / concurrentCount
+	totalTTFB := int64(0)
+	downloaded := int64(0)
+
+	var wg sync.WaitGroup
+	start := time.Now()
+	for i := 0; i < concurrentCount; i++ {
+		wg.Add(1)
+		go func(i int) {
+			result, w := TestProxy(name, proxy, chunkSize, timeout)
+			if w != 0 {
+				atomic.AddInt64(&downloaded, w)
+				atomic.AddInt64(&totalTTFB, int64(result.TTFB))
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	downloadTime := time.Since(start)
+
+	result := &Result{
+		Name:      name,
+		Bandwidth: float64(downloaded) / downloadTime.Seconds(),
+		TTFB:      time.Duration(totalTTFB / int64(concurrentCount)),
+	}
+
+	return result
+}
+
+func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) (*Result, int64) {
 	client := http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
@@ -214,22 +251,22 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 	start := time.Now()
 	resp, err := client.Get(fmt.Sprintf("https://speed.cloudflare.com/__down?bytes=%d", downloadSize))
 	if err != nil {
-		return &Result{name, -1, -1}
+		return &Result{name, -1, -1}, 0
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return &Result{name, -1, -1}
+		return &Result{name, -1, -1}, 0
 	}
 	ttfb := time.Since(start)
 
 	written, _ := io.Copy(io.Discard, resp.Body)
 	if written == 0 {
-		return &Result{name, -1, -1}
+		return &Result{name, -1, -1}, 0
 	}
 	downloadTime := time.Since(start) - ttfb
 	bandwidth := float64(written) / downloadTime.Seconds()
 
-	return &Result{name, bandwidth, ttfb}
+	return &Result{name, bandwidth, ttfb}, written
 }
 
 var (

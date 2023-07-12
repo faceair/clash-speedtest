@@ -21,6 +21,8 @@ Features:
 Usage of clash-speedtest:
   -c string
         configuration file path, also support http(s) url
+  -concurrent int
+        download concurrent size (default 4)
   -f string
         filter proxies by name, use regexp (default ".*")
   -output string
