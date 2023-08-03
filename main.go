@@ -8,8 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -48,41 +48,45 @@ func main() {
 		log.Fatalln("Please specify the configuration file")
 	}
 
-	if strings.HasPrefix(*configPathConfig, "http") {
-		resp, err := http.Get(*configPathConfig)
+	var allProxies = make(map[string]C.Proxy)
+	arURL := strings.Split(*configPathConfig, ",")
+	for _, v := range arURL {
+		u, err := url.Parse(v)
+		if err != nil {
+			log.Warnln("There is an error url being ignored : %s", v)
+			continue
+		}
+
+		resp, err := http.Get(u.String())
 		if err != nil {
 			log.Fatalln("Failed to fetch config: %s", err)
 		}
+
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Fatalln("Failed to read config: %s", err)
 		}
-		*configPathConfig = filepath.Join(os.TempDir(), "clash_config.yaml")
-		if err := os.WriteFile(*configPathConfig, body, 0o644); err != nil {
-			log.Fatalln("Failed to write config: %s", err)
+
+		lps, err := loadProxies(body)
+		if err != nil {
+			log.Fatalln("Failed to convert : %s", err)
+		}
+
+		for k, p := range lps {
+			if _, ok := allProxies[k]; !ok {
+				allProxies[k] = p
+			}
 		}
 	}
 
-	if !filepath.IsAbs(*configPathConfig) {
-		currentDir, _ := os.Getwd()
-		*configPathConfig = filepath.Join(currentDir, *configPathConfig)
-	}
-	C.SetHomeDir(os.TempDir())
-	C.SetConfig(*configPathConfig)
-
-	proxies, err := loadProxies()
-	if err != nil {
-		log.Fatalln("Failed to load config: %s", err)
-	}
-
-	filteredProxies := filterProxies(*filterRegexConfig, proxies)
+	filteredProxies := filterProxies(*filterRegexConfig, allProxies)
 	results := make([]Result, 0, len(filteredProxies))
 
 	format := "%s%-42s\t%-12s\t%-12s\033[0m\n"
 
 	fmt.Printf(format, "", "节点", "带宽", "延迟")
 	for _, name := range filteredProxies {
-		proxy := proxies[name]
+		proxy := allProxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
 			result := TestProxyConcurrent(name, proxy, *downloadSizeConfig, *timeoutConfig, *concurrent)
@@ -133,11 +137,7 @@ func filterProxies(filter string, proxies map[string]C.Proxy) []string {
 	return filteredProxies
 }
 
-func loadProxies() (map[string]C.Proxy, error) {
-	buf, err := os.ReadFile(C.Path.Config())
-	if err != nil {
-		return nil, err
-	}
+func loadProxies(buf []byte) (map[string]C.Proxy, error) {
 	rawCfg := &RawConfig{
 		Proxies: []map[string]any{},
 	}
