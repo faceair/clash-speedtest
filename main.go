@@ -26,6 +26,7 @@ import (
 )
 
 var (
+	livenessObject     = flag.String("l", "https://speed.cloudflare.com/__down?bytes=%d", "liveness object, support http(s) url, support payload too")
 	configPathConfig   = flag.String("c", "", "configuration file path, also support http(s) url")
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
 	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
@@ -249,7 +250,7 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 	}
 
 	start := time.Now()
-	resp, err := client.Get(fmt.Sprintf("https://speed.cloudflare.com/__down?bytes=%d", downloadSize))
+	resp, err := client.Get(fmt.Sprintf(*livenessObject, downloadSize))
 	if err != nil {
 		return &Result{name, -1, -1}, 0
 	}
