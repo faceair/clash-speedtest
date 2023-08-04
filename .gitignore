@@ -1,3 +1,6 @@
 .vscode
 
 dist/
+*.exe
+
+.idea
