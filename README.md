@@ -33,6 +33,9 @@ Usage of clash-speedtest:
         sort field for testing proxies, b for bandwidth, t for TTFB (default "b")
   -timeout duration
         timeout for testing proxies (default 5s)
+  -l string
+        liveness object, support http(s) url, support payload too (default "https://speed.cloudflare.com/__down?bytes=%d")
+        
 
 # 演示：
 # 1. 测试全部节点，使用 HTTP 订阅地址
@@ -45,6 +48,25 @@ Premium|广港|IEPL|02                        	N/A         	N/A
 Premium|广港|IEPL|03                        	2.62MB/s    	333.00ms
 Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
 Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
+# 3. 使用自定义服务器进行测试（ip地址为示例，并无实际效果）
+> clash-speedtest -c "https://ds-epimetheus.oss-cn-shenzhen.aliyuncs.com/rules" -l "http://1.1.1.1:8080/_down?bytes=%d" --size 10200
+节点                                            带宽            延迟          
+FORWARD-STEAM-COM                               9.27KB/s        310.00ms    
+FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms     
+HK-COMMON                                       60.94KB/s       158.00ms    
+TOKYO-PCCW                                      21.83KB/s       364.00ms    
+TW-IEPL-01                                      109.34KB/s      73.00ms     
+USA-GIA                                         14.42KB/s       688.00ms 
+```
+
+## 如何使用自定义服务器进行测速
+
+```shell
+# 在您需要进行测速的服务器上启动服务端
+$ cd livenessObject
+$ go build .
+$ ./speedtest
+# 此时使用 http://ip:8080/_down?bytes=%d 作为 payload 即可，测试完成记得关闭以免被刷流量
 ```
 
 ## 速度测试原理
