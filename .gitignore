@@ -3,4 +3,4 @@
 dist/
 *.exe
 
-.idea
+.idea/*
