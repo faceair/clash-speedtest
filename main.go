@@ -5,6 +5,8 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
+	"github.com/Dreamacro/clash/adapter/outbound"
+	"github.com/Dreamacro/clash/common/structure"
 	"io"
 	"net"
 	"net/http"
@@ -32,7 +34,7 @@ var (
 	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
-	output             = flag.String("output", "", "output result to csv file")
+	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
 )
 
@@ -155,8 +157,14 @@ func main() {
 		}
 	}
 
-	if *output != "" {
-		writeToCSV(*output, results)
+	if strings.EqualFold(*output, "yaml") {
+		if err := writeNodeConfigurationToYAML("result.yaml", results, allProxies); err != nil {
+			log.Fatalln("Failed to write yaml: %s", err)
+		}
+	} else if strings.EqualFold(*output, "csv") {
+		if err := writeToCSV("result.csv", results); err != nil {
+			log.Fatalln("Failed to write csv: %s", err)
+		}
 	}
 }
 
@@ -230,7 +238,7 @@ func (r *Result) Printf(format string) {
 	} else if r.Bandwidth > 1024*1024*10 {
 		color = green
 	}
-	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMillseconds(r.TTFB))
+	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMilliseconds(r.TTFB))
 }
 
 func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, concurrentCount int) *Result {
@@ -290,7 +298,7 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 		return &Result{name, -1, -1}, 0
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode-http.StatusOK > 100 {
 		return &Result{name, -1, -1}, 0
 	}
 	ttfb := time.Since(start)
@@ -339,11 +347,40 @@ func formatBandwidth(v float64) string {
 	return fmt.Sprintf("%.02fTB/s", v)
 }
 
-func formatMillseconds(v time.Duration) string {
+func formatMilliseconds(v time.Duration) string {
 	if v <= 0 {
 		return "N/A"
 	}
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
+}
+
+func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]C.Proxy) error {
+	fp, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	decoder := structure.NewDecoder(structure.Option{TagName: "proxy", WeaklyTypedInput: true})
+	var sortedProxies []any
+	for _, result := range results {
+		if v, ok := proxies[result.Name]; ok {
+			dst := &outbound.TrojanOption{}
+			err = decoder.Decode(map[string]any{result.Name: v}, dst)
+			if err != nil {
+				log.Warnln("%s", err)
+			}
+			sortedProxies = append(sortedProxies, dst)
+		}
+	}
+
+	bytes, err := yaml.Marshal(sortedProxies)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%s", bytes)
+	return nil
 }
 
 func writeToCSV(filePath string, results []Result) error {
