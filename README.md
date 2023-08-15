@@ -48,8 +48,10 @@ Premium|广港|IEPL|02                        	N/A         	N/A
 Premium|广港|IEPL|03                        	2.62MB/s    	333.00ms
 Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
 Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
+# 3. 当然你也可以混合使用
+> clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
 # 3. 使用自定义服务器进行测试（ip地址为示例，并无实际效果）
-> clash-speedtest -c "https://ds-epimetheus.oss-cn-shenzhen.aliyuncs.com/rules" -l "http://1.1.1.1:8080/_down?bytes=%d" --size 10200
+> clash-speedtest -c "https://domain/rules" -l "http://1.1.1.1:8080/_down?bytes=%d" --size 10200
 节点                                            带宽            延迟          
 FORWARD-STEAM-COM                               9.27KB/s        310.00ms    
 FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms     
