@@ -5,8 +5,6 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"github.com/Dreamacro/clash/adapter/outbound"
-	"github.com/Dreamacro/clash/common/structure"
 	"io"
 	"net"
 	"net/http"
@@ -36,6 +34,22 @@ var (
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
+)
+
+type CProxy struct {
+	C.Proxy
+	SecretConfig any
+}
+
+type Result struct {
+	Name      string
+	Bandwidth float64
+	TTFB      time.Duration
+}
+
+var (
+	red   = "\033[31m"
+	green = "\033[32m"
 )
 
 type RawConfig struct {
@@ -76,7 +90,7 @@ func main() {
 		log.Fatalln("Please specify the configuration file")
 	}
 
-	var allProxies = make(map[string]C.Proxy)
+	var allProxies = make(map[string]CProxy)
 	arURL := strings.Split(*configPathConfig, ",")
 	for _, v := range arURL {
 		var u any
@@ -168,7 +182,7 @@ func main() {
 	}
 }
 
-func filterProxies(filter string, proxies map[string]C.Proxy) []string {
+func filterProxies(filter string, proxies map[string]CProxy) []string {
 	filterRegexp := regexp.MustCompile(filter)
 	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
@@ -180,14 +194,14 @@ func filterProxies(filter string, proxies map[string]C.Proxy) []string {
 	return filteredProxies
 }
 
-func loadProxies(buf []byte) (map[string]C.Proxy, error) {
+func loadProxies(buf []byte) (map[string]CProxy, error) {
 	rawCfg := &RawConfig{
 		Proxies: []map[string]any{},
 	}
 	if err := yaml.Unmarshal(buf, rawCfg); err != nil {
 		return nil, err
 	}
-	proxies := make(map[string]C.Proxy)
+	proxies := make(map[string]CProxy)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
@@ -200,7 +214,7 @@ func loadProxies(buf []byte) (map[string]C.Proxy, error) {
 		if _, exist := proxies[proxy.Name()]; exist {
 			return nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
 		}
-		proxies[proxy.Name()] = proxy
+		proxies[proxy.Name()] = CProxy{Proxy: proxy, SecretConfig: config}
 	}
 	for name, config := range providersConfig {
 		if name == provider.ReservedName {
@@ -214,22 +228,11 @@ func loadProxies(buf []byte) (map[string]C.Proxy, error) {
 			return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 		}
 		for _, proxy := range pd.Proxies() {
-			proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = proxy
+			proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = CProxy{Proxy: proxy}
 		}
 	}
 	return proxies, nil
 }
-
-type Result struct {
-	Name      string
-	Bandwidth float64
-	TTFB      time.Duration
-}
-
-var (
-	red   = "\033[31m"
-	green = "\033[32m"
-)
 
 func (r *Result) Printf(format string) {
 	color := ""
@@ -354,23 +357,17 @@ func formatMilliseconds(v time.Duration) string {
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
 }
 
-func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]C.Proxy) error {
+func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]CProxy) error {
 	fp, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
 	defer fp.Close()
 
-	decoder := structure.NewDecoder(structure.Option{TagName: "proxy", WeaklyTypedInput: true})
 	var sortedProxies []any
 	for _, result := range results {
 		if v, ok := proxies[result.Name]; ok {
-			dst := &outbound.TrojanOption{}
-			err = decoder.Decode(map[string]any{result.Name: v}, dst)
-			if err != nil {
-				log.Warnln("%s", err)
-			}
-			sortedProxies = append(sortedProxies, dst)
+			sortedProxies = append(sortedProxies, v.SecretConfig)
 		}
 	}
 
@@ -379,8 +376,8 @@ func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map
 		return err
 	}
 
-	fmt.Printf("%s", bytes)
-	return nil
+	_, err = fp.Write(bytes)
+	return err
 }
 
 func writeToCSV(filePath string, results []Result) error {
@@ -404,7 +401,7 @@ func writeToCSV(filePath string, results []Result) error {
 			fmt.Sprintf("%.2f", result.Bandwidth/1024/1024),
 			strconv.FormatInt(result.TTFB.Milliseconds(), 10),
 		}
-		err := csvWriter.Write(line)
+		err = csvWriter.Write(line)
 		if err != nil {
 			return err
 		}
