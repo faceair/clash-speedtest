@@ -25,8 +25,8 @@ Usage of clash-speedtest:
         download concurrent size (default 4)
   -f string
         filter proxies by name, use regexp (default ".*")
-  -output string
-        output result to csv file
+  -output yaml / csv
+        output result to csv / yaml file
   -size int
         download size for testing proxies (default 104857600)
   -sort string
@@ -60,6 +60,8 @@ TOKYO-PCCW                                      21.83KB/s       364.00ms
 TW-IEPL-01                                      109.34KB/s      73.00ms     
 USA-GIA                                         14.42KB/s       688.00ms 
 ```
+
+> 当您指定了 `--output yaml` 的时候，会自动将排序后的节点以完整配置输出，方便您编辑自己的节点文件
 
 ## 如何使用自定义服务器进行测速
 
