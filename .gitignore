@@ -3,4 +3,5 @@
 dist/
 *.exe
 
-.idea
+.idea/*
+result.yaml

@@ -32,13 +32,55 @@ var (
 	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
 	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
-	output             = flag.String("output", "", "output result to csv file")
+	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
+)
+
+type CProxy struct {
+	C.Proxy
+	SecretConfig any
+}
+
+type Result struct {
+	Name      string
+	Bandwidth float64
+	TTFB      time.Duration
+}
+
+var (
+	red   = "\033[31m"
+	green = "\033[32m"
 )
 
 type RawConfig struct {
 	Providers map[string]map[string]any `yaml:"proxy-providers"`
 	Proxies   []map[string]any          `yaml:"proxies"`
+}
+
+func DifferentTypesOfParsing(pv string, isUriType bool) any {
+	defer func() {
+		// 防止解析过程中出现获取文件句柄出现致命性错误
+		if err := recover(); err != nil {
+			log.Warnln("There is an error url being ignored : %s", err)
+		}
+	}()
+	var err error
+	if isUriType {
+		var u *url.URL
+		if u, err = url.Parse(pv); err != nil {
+			return nil
+		}
+
+		if u.Host == "" {
+			return nil
+		}
+		return u
+	} else {
+		if _, err = os.Stat(pv); err != nil {
+			return DifferentTypesOfParsing(pv, true)
+		}
+		return os.File{}
+	}
 }
 
 func main() {
@@ -48,23 +90,32 @@ func main() {
 		log.Fatalln("Please specify the configuration file")
 	}
 
-	var allProxies = make(map[string]C.Proxy)
+	var allProxies = make(map[string]CProxy)
 	arURL := strings.Split(*configPathConfig, ",")
 	for _, v := range arURL {
-		u, err := url.Parse(v)
-		if err != nil {
-			log.Warnln("There is an error url being ignored : %s", v)
-			continue
-		}
+		var u any
+		var body []byte
+		var err error
 
-		resp, err := http.Get(u.String())
-		if err != nil {
-			log.Fatalln("Failed to fetch config: %s", err)
-		}
+		// 前置最基本的判断，如果错了也可以通过在方法内纠正回来
+		u = DifferentTypesOfParsing(v, strings.HasPrefix(v, "http"))
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatalln("Failed to read config: %s", err)
+		// 避免因为多层 if 产生的嵌套造成代码维护性下降
+		switch u.(type) {
+		case os.File:
+			if body, err = os.ReadFile(v); err != nil {
+				log.Warnln("Failed to decode config: %s", err)
+				continue
+			}
+		case *url.URL:
+			resp, err := http.Get(u.(*url.URL).String())
+			if err != nil {
+				log.Warnln("Failed to fetch config: %s", err)
+			}
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				log.Warnln("Failed to read config: %s", err)
+			}
 		}
 
 		lps, err := loadProxies(body)
@@ -120,12 +171,18 @@ func main() {
 		}
 	}
 
-	if *output != "" {
-		writeToCSV(*output, results)
+	if strings.EqualFold(*output, "yaml") {
+		if err := writeNodeConfigurationToYAML("result.yaml", results, allProxies); err != nil {
+			log.Fatalln("Failed to write yaml: %s", err)
+		}
+	} else if strings.EqualFold(*output, "csv") {
+		if err := writeToCSV("result.csv", results); err != nil {
+			log.Fatalln("Failed to write csv: %s", err)
+		}
 	}
 }
 
-func filterProxies(filter string, proxies map[string]C.Proxy) []string {
+func filterProxies(filter string, proxies map[string]CProxy) []string {
 	filterRegexp := regexp.MustCompile(filter)
 	filteredProxies := make([]string, 0, len(proxies))
 	for name := range proxies {
@@ -137,14 +194,14 @@ func filterProxies(filter string, proxies map[string]C.Proxy) []string {
 	return filteredProxies
 }
 
-func loadProxies(buf []byte) (map[string]C.Proxy, error) {
+func loadProxies(buf []byte) (map[string]CProxy, error) {
 	rawCfg := &RawConfig{
 		Proxies: []map[string]any{},
 	}
 	if err := yaml.Unmarshal(buf, rawCfg); err != nil {
 		return nil, err
 	}
-	proxies := make(map[string]C.Proxy)
+	proxies := make(map[string]CProxy)
 	proxiesConfig := rawCfg.Proxies
 	providersConfig := rawCfg.Providers
 
@@ -157,7 +214,7 @@ func loadProxies(buf []byte) (map[string]C.Proxy, error) {
 		if _, exist := proxies[proxy.Name()]; exist {
 			return nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
 		}
-		proxies[proxy.Name()] = proxy
+		proxies[proxy.Name()] = CProxy{Proxy: proxy, SecretConfig: config}
 	}
 	for name, config := range providersConfig {
 		if name == provider.ReservedName {
@@ -171,22 +228,11 @@ func loadProxies(buf []byte) (map[string]C.Proxy, error) {
 			return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 		}
 		for _, proxy := range pd.Proxies() {
-			proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = proxy
+			proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = CProxy{Proxy: proxy}
 		}
 	}
 	return proxies, nil
 }
-
-type Result struct {
-	Name      string
-	Bandwidth float64
-	TTFB      time.Duration
-}
-
-var (
-	red   = "\033[31m"
-	green = "\033[32m"
-)
 
 func (r *Result) Printf(format string) {
 	color := ""
@@ -195,7 +241,7 @@ func (r *Result) Printf(format string) {
 	} else if r.Bandwidth > 1024*1024*10 {
 		color = green
 	}
-	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMillseconds(r.TTFB))
+	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMilliseconds(r.TTFB))
 }
 
 func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, concurrentCount int) *Result {
@@ -255,7 +301,7 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 		return &Result{name, -1, -1}, 0
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode-http.StatusOK > 100 {
 		return &Result{name, -1, -1}, 0
 	}
 	ttfb := time.Since(start)
@@ -304,11 +350,34 @@ func formatBandwidth(v float64) string {
 	return fmt.Sprintf("%.02fTB/s", v)
 }
 
-func formatMillseconds(v time.Duration) string {
+func formatMilliseconds(v time.Duration) string {
 	if v <= 0 {
 		return "N/A"
 	}
 	return fmt.Sprintf("%.02fms", float64(v.Milliseconds()))
+}
+
+func writeNodeConfigurationToYAML(filePath string, results []Result, proxies map[string]CProxy) error {
+	fp, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	var sortedProxies []any
+	for _, result := range results {
+		if v, ok := proxies[result.Name]; ok {
+			sortedProxies = append(sortedProxies, v.SecretConfig)
+		}
+	}
+
+	bytes, err := yaml.Marshal(sortedProxies)
+	if err != nil {
+		return err
+	}
+
+	_, err = fp.Write(bytes)
+	return err
 }
 
 func writeToCSV(filePath string, results []Result) error {
@@ -332,7 +401,7 @@ func writeToCSV(filePath string, results []Result) error {
 			fmt.Sprintf("%.2f", result.Bandwidth/1024/1024),
 			strconv.FormatInt(result.TTFB.Milliseconds(), 10),
 		}
-		err := csvWriter.Write(line)
+		err = csvWriter.Write(line)
 		if err != nil {
 			return err
 		}
