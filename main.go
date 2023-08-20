@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -57,32 +56,6 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func DifferentTypesOfParsing(pv string, isUriType bool) any {
-	defer func() {
-		// 防止解析过程中出现获取文件句柄出现致命性错误
-		if err := recover(); err != nil {
-			log.Warnln("There is an error url being ignored : %s", err)
-		}
-	}()
-	var err error
-	if isUriType {
-		var u *url.URL
-		if u, err = url.Parse(pv); err != nil {
-			return nil
-		}
-
-		if u.Host == "" {
-			return nil
-		}
-		return u
-	} else {
-		if _, err = os.Stat(pv); err != nil {
-			return DifferentTypesOfParsing(pv, true)
-		}
-		return os.File{}
-	}
-}
-
 func main() {
 	flag.Parse()
 
@@ -91,31 +64,22 @@ func main() {
 	}
 
 	var allProxies = make(map[string]CProxy)
-	arURL := strings.Split(*configPathConfig, ",")
-	for _, v := range arURL {
-		var u any
+	for _, configPath := range strings.Split(*configPathConfig, ",") {
 		var body []byte
 		var err error
-
-		// 前置最基本的判断，如果错了也可以通过在方法内纠正回来
-		u = DifferentTypesOfParsing(v, strings.HasPrefix(v, "http"))
-
-		// 避免因为多层 if 产生的嵌套造成代码维护性下降
-		switch u.(type) {
-		case os.File:
-			if body, err = os.ReadFile(v); err != nil {
-				log.Warnln("Failed to decode config: %s", err)
+		if strings.HasPrefix(configPath, "http") {
+			resp, err := http.Get(configPath)
+			if err != nil {
+				log.Warnln("failed to fetch config: %s", err)
 				continue
 			}
-		case *url.URL:
-			resp, err := http.Get(u.(*url.URL).String())
-			if err != nil {
-				log.Warnln("Failed to fetch config: %s", err)
-			}
 			body, err = io.ReadAll(resp.Body)
-			if err != nil {
-				log.Warnln("Failed to read config: %s", err)
-			}
+		} else {
+			body, err = os.ReadFile(configPath)
+		}
+		if err != nil {
+			log.Warnln("failed to read config: %s", err)
+			continue
 		}
 
 		lps, err := loadProxies(body)
