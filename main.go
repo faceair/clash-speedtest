@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,8 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Dreamacro/clash/adapter"
@@ -30,7 +26,7 @@ var (
 	configPathConfig   = flag.String("c", "", "configuration file path, also support http(s) url")
 	filterRegexConfig  = flag.String("f", ".*", "filter proxies by name, use regexp")
 	downloadSizeConfig = flag.Int("size", 1024*1024*100, "download size for testing proxies")
-	timeoutConfig      = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
+	timeoutConfig      = flag.Int("timeout", 5, "timeout for testing proxies")
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
@@ -133,14 +129,40 @@ func main() {
 	filteredProxies := filterProxies(*filterRegexConfig, allProxies)
 	results := make([]Result, 0, len(filteredProxies))
 
+	// 做一个简单的 payload 判断，防止直接序列化导致获取状态异常
+	// 例如这里当我给了一个 https://google.com，直接拼接会产生错误 ( ...e.com1024 )
+	// 但是我们又不一定只会用 payload (可能会给定一个绝对 URL )，所以做一个匹配区分
+	ou := fmt.Sprintf(*livenessObject, (*downloadSizeConfig)/(*concurrent))
+	if strings.HasPrefix(ou, *livenessObject) {
+		ou = *livenessObject
+	}
+
+	timeout := time.Duration(*timeoutConfig) * time.Second
+	proxyChecked := false
+	var ouCache func() (bool, bool)
+
 	format := "%s%-42s\t%-12s\t%-12s\033[0m\n"
 
 	fmt.Printf(format, "", "节点", "带宽", "延迟")
 	for _, name := range filteredProxies {
+		var result *Result
 		proxy := allProxies[name]
 		switch proxy.Type() {
 		case C.Shadowsocks, C.ShadowsocksR, C.Snell, C.Socks5, C.Http, C.Vmess, C.Trojan:
-			result := TestProxyConcurrent(name, proxy, *downloadSizeConfig, *timeoutConfig, *concurrent)
+			var c bool
+			if !proxyChecked {
+				ouCache = IsStreamBlock(ou, proxy, timeout)
+				proxyChecked, c = ouCache()
+			} else {
+				_, c = ouCache()
+			}
+
+			if !proxyChecked {
+				result = &Result{name, 0, 0}
+			} else {
+				result = TestProxyConcurrent(name, proxy, ou, timeout, *concurrent, c)
+			}
+
 			result.Printf(format)
 			results = append(results, *result)
 		case C.Direct, C.Reject, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
@@ -242,78 +264,6 @@ func (r *Result) Printf(format string) {
 		color = green
 	}
 	fmt.Printf(format, color, formatName(r.Name), formatBandwidth(r.Bandwidth), formatMilliseconds(r.TTFB))
-}
-
-func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout time.Duration, concurrentCount int) *Result {
-	if concurrentCount <= 0 {
-		concurrentCount = 1
-	}
-
-	chunkSize := downloadSize / concurrentCount
-	totalTTFB := int64(0)
-	downloaded := int64(0)
-
-	var wg sync.WaitGroup
-	start := time.Now()
-	for i := 0; i < concurrentCount; i++ {
-		wg.Add(1)
-		go func(i int) {
-			result, w := TestProxy(name, proxy, chunkSize, timeout)
-			if w != 0 {
-				atomic.AddInt64(&downloaded, w)
-				atomic.AddInt64(&totalTTFB, int64(result.TTFB))
-			}
-			wg.Done()
-		}(i)
-	}
-	wg.Wait()
-	downloadTime := time.Since(start)
-
-	result := &Result{
-		Name:      name,
-		Bandwidth: float64(downloaded) / downloadTime.Seconds(),
-		TTFB:      time.Duration(totalTTFB / int64(concurrentCount)),
-	}
-
-	return result
-}
-
-func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) (*Result, int64) {
-	client := http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
-				}
-				return proxy.DialContext(ctx, &C.Metadata{
-					Host:    host,
-					DstPort: port,
-				})
-			},
-		},
-	}
-
-	start := time.Now()
-	resp, err := client.Get(fmt.Sprintf(*livenessObject, downloadSize))
-	if err != nil {
-		return &Result{name, -1, -1}, 0
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode-http.StatusOK > 100 {
-		return &Result{name, -1, -1}, 0
-	}
-	ttfb := time.Since(start)
-
-	written, _ := io.Copy(io.Discard, resp.Body)
-	if written == 0 {
-		return &Result{name, -1, -1}, 0
-	}
-	downloadTime := time.Since(start) - ttfb
-	bandwidth := float64(written) / downloadTime.Seconds()
-
-	return &Result{name, bandwidth, ttfb}, written
 }
 
 var (
