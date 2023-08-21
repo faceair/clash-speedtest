@@ -1,8 +1,14 @@
 package main
 
 import (
+	"io"
+	"math/rand"
 	"net/http"
 	"strconv"
+)
+
+var (
+	zeroByte = rand.New(rand.NewSource(0))
 )
 
 func main() {
@@ -15,7 +21,7 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	http.HandleFunc("/_down", func(w http.ResponseWriter, r *http.Request) {
-		byteSize, err := strconv.Atoi(r.URL.Query().Get("bytes"))
+		byteSize, err := strconv.ParseInt(r.URL.Query().Get("bytes"), 10, 64) 
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
@@ -25,9 +31,8 @@ func main() {
 		w.Header().Add("Content-Disposition", "attachment; filename=largefile")
 		w.Header().Add("Content-Type", "application/octet-stream")
 
-		zeroBytes := []byte("0")
-		for i := 0; i < byteSize; i++ {
-			w.Write(zeroBytes)
+		if _, err := io.CopyN(w, zeroByte, byteSize); err == nil {
+			return
 		}
 	})
 	http.ListenAndServe(":8080", nil)
