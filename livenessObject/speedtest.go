@@ -21,7 +21,7 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	http.HandleFunc("/_down", func(w http.ResponseWriter, r *http.Request) {
-		byteSize, err := strconv.ParseInt(r.URL.Query().Get("bytes"), 10, 64) 
+		byteSize, err := strconv.ParseInt(r.URL.Query().Get("bytes"), 10, 64)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
