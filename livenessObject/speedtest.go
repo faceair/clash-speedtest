@@ -7,10 +7,6 @@ import (
 	"strconv"
 )
 
-var (
-	zeroByte = rand.New(rand.NewSource(0))
-)
-
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -31,6 +27,7 @@ func main() {
 		w.Header().Add("Content-Disposition", "attachment; filename=largefile")
 		w.Header().Add("Content-Type", "application/octet-stream")
 
+		zeroByte := rand.New(rand.NewSource(0))
 		if _, err := io.CopyN(w, zeroByte, byteSize); err == nil {
 			return
 		}
