@@ -14,6 +14,12 @@ func main() {
 	http.HandleFunc("/liveness", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
+
+	zeroBytes := make([]byte, 32*1024)
+	for i := 0; i < len(zeroBytes); i++ {
+		zeroBytes[i] = '0'
+	}
+
 	http.HandleFunc("/_down", func(w http.ResponseWriter, r *http.Request) {
 		byteSize, err := strconv.Atoi(r.URL.Query().Get("bytes"))
 		if err != nil {
@@ -25,10 +31,11 @@ func main() {
 		w.Header().Add("Content-Disposition", "attachment; filename=largefile")
 		w.Header().Add("Content-Type", "application/octet-stream")
 
-		zeroBytes := []byte("0")
-		for i := 0; i < byteSize; i++ {
+		batchCount := byteSize / len(zeroBytes)
+		for i := 0; i < batchCount; i++ {
 			w.Write(zeroBytes)
 		}
+		w.Write(zeroBytes[:byteSize%len(zeroBytes)])
 	})
 	http.ListenAndServe(":8080", nil)
 }
