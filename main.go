@@ -59,6 +59,8 @@ type RawConfig struct {
 func main() {
 	flag.Parse()
 
+	C.UA = "clash.meta"
+
 	if *configPathConfig == "" {
 		log.Fatalln("Please specify the configuration file")
 	}
