@@ -68,7 +68,8 @@ func main() {
 		var body []byte
 		var err error
 		if strings.HasPrefix(configPath, "http") {
-			resp, err := http.Get(configPath)
+			var resp *http.Response
+			resp, err = http.Get(configPath)
 			if err != nil {
 				log.Warnln("failed to fetch config: %s", err)
 				continue
@@ -251,9 +252,13 @@ func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Durati
 				if err != nil {
 					return nil, err
 				}
+				var u16Port uint16
+				if port, err := strconv.ParseUint(port, 10, 16); err == nil {
+					u16Port = uint16(port)
+				}
 				return proxy.DialContext(ctx, &C.Metadata{
 					Host:    host,
-					DstPort: port,
+					DstPort: u16Port,
 				})
 			},
 		},
