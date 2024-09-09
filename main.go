@@ -1,13 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/csv"
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -22,6 +21,7 @@ import (
 	C "github.com/Dreamacro/clash/constant"
 	"github.com/Dreamacro/clash/log"
 	"gopkg.in/yaml.v3"
+	"golang.org/x/net/proxy"
 )
 
 var (
@@ -33,7 +33,43 @@ var (
 	sortField          = flag.String("sort", "b", "sort field for testing proxies, b for bandwidth, t for TTFB")
 	output             = flag.String("output", "", "output result to csv/yaml file")
 	concurrent         = flag.Int("concurrent", 4, "download concurrent size")
+	proxyConfig        = flag.String("proxy", "", "HTTP or SOCKS5 proxy, e.g., http://user:pass@host:port or socks5://user:pass@host:port")
 )
+
+func createTransport(proxyURL string) (*http.Transport, error) {
+	if proxyURL == "" {
+		return &http.Transport{}, nil
+	}
+
+	parsedURL, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid proxy URL: %v", err)
+	}
+
+	switch parsedURL.Scheme {
+	case "http", "https":
+		return &http.Transport{
+			Proxy: http.ProxyURL(parsedURL),
+		}, nil
+	case "socks5":
+		auth := proxy.Auth{}
+		if parsedURL.User != nil {
+			auth.User = parsedURL.User.Username()
+			password, _ := parsedURL.User.Password()
+			auth.Password = password
+		}
+		dialer, err := proxy.SOCKS5("tcp", parsedURL.Host, &auth, proxy.Direct)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create SOCKS5 proxy: %v", err)
+		}
+		return &http.Transport{
+			Dial: dialer.Dial, // Use Dial instead of DialContext
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported proxy scheme: %s", parsedURL.Scheme)
+	}
+}
+
 
 type CProxy struct {
 	C.Proxy
@@ -246,24 +282,15 @@ func TestProxyConcurrent(name string, proxy C.Proxy, downloadSize int, timeout t
 }
 
 func TestProxy(name string, proxy C.Proxy, downloadSize int, timeout time.Duration) (*Result, int64) {
+	// 创建代理 Transport
+	transport, err := createTransport(*proxyConfig)
+	if err != nil {
+		log.Fatalln("Invalid proxy:", err)
+	}
+
 	client := http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, err
-				}
-				var u16Port uint16
-				if port, err := strconv.ParseUint(port, 10, 16); err == nil {
-					u16Port = uint16(port)
-				}
-				return proxy.DialContext(ctx, &C.Metadata{
-					Host:    host,
-					DstPort: u16Port,
-				})
-			},
-		},
+		Timeout:   timeout,
+		Transport: transport,  // 应用代理
 	}
 
 	start := time.Now()

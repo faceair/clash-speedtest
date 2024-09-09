@@ -35,6 +35,8 @@ Usage of clash-speedtest:
         timeout for testing proxies (default 5s)
   -l string
         liveness object, support http(s) url, support payload too (default "https://speed.cloudflare.com/__down?bytes=%d")
+  -proxy
+        HTTP or SOCKS5 proxy, e.g., http://user:pass@host:port or socks5://user:pass@host:port
         
 
 # 演示：
@@ -71,6 +73,12 @@ $ cd livenessObject
 $ go build .
 $ ./speedtest
 # 此时使用 http://ip:8080/_down?bytes=%d 作为 payload 即可，测试完成记得关闭以免被刷流量
+```
+
+## 如何测试socks5和http中转速度
+```shell
+# 测试socks5
+$ clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港' -proxy socks5://username:password@127.0.0.1:1080
 ```
 
 ## 速度测试原理
