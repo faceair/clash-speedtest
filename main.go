@@ -90,11 +90,12 @@ func printResults(results []*speedtester.Result) {
 
 		proxyName := fmt.Sprintf("%-40s", result.ProxyName)
 
-		color := colorGreen
+		color := ""
+		speed := float64(result.DownloadSpeed) / (1024 * 1024) // 转换为 MB/s
 		if speedStr == "0.00B/s" {
 			color = colorRed
-		} else if strings.HasPrefix(speedStr, "0") {
-			color = colorYellow
+		} else if speed >= 10 {
+			color = colorGreen
 		}
 
 		index := fmt.Sprintf("%d.", i+1)
