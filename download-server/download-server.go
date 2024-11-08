@@ -37,5 +37,6 @@ func main() {
 		}
 		w.Write(zeroBytes[:byteSize%len(zeroBytes)])
 	})
+
 	http.ListenAndServe(":8080", nil)
 }

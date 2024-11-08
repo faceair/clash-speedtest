@@ -21,20 +21,16 @@ Features:
 Usage of clash-speedtest:
   -c string
         configuration file path, also support http(s) url
-  -concurrent int
-        download concurrent size (default 4)
   -f string
         filter proxies by name, use regexp (default ".*")
-  -output yaml / csv
-        output result to csv / yaml file
-  -size int
+  -download-url string
+        download url for testing proxies (default "https://speed.cloudflare.com/__down?bytes=%d")
+  -download-size int
         download size for testing proxies (default 104857600)
-  -sort string
-        sort field for testing proxies, b for bandwidth, t for TTFB (default "b")
   -timeout duration
         timeout for testing proxies (default 5s)
-  -l string
-        liveness object, support http(s) url, support payload too (default "https://speed.cloudflare.com/__down?bytes=%d")
+  -concurrent int
+        download concurrent size (default 4)
 
 
 # 演示：
@@ -51,7 +47,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 # 3. 当然你也可以混合使用
 > clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
 # 3. 使用自定义服务器进行测试（ip地址为示例，并无实际效果）
-> clash-speedtest -c "https://domain/rules" -l "http://1.1.1.1:8080/_down?bytes=%d" --size 10200
+> clash-speedtest -c "https://domain/rules" -download-url "http://1.1.1.1:8080/_down?bytes=%d" --download-size 10200
 节点                                            带宽            延迟
 FORWARD-STEAM-COM                               9.27KB/s        310.00ms
 FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms
@@ -61,15 +57,13 @@ TW-IEPL-01                                      109.34KB/s      73.00ms
 USA-GIA                                         14.42KB/s       688.00ms
 ```
 
-> 当您指定了 `--output yaml` 的时候，会自动将排序后的节点以完整配置输出，方便您编辑自己的节点文件
-
 ## 如何使用自定义服务器进行测速
 
 ```shell
 # 在您需要进行测速的服务器上启动服务端
-$ cd livenessObject
+$ cd download-server
 $ go build .
-$ ./speedtest
+$ ./download-server
 # 此时使用 http://ip:8080/_down?bytes=%d 作为 payload 即可，测试完成记得关闭以免被刷流量
 ```
 
