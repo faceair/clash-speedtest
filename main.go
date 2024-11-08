@@ -17,10 +17,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Dreamacro/clash/adapter"
-	"github.com/Dreamacro/clash/adapter/provider"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/log"
+	"github.com/metacubex/mihomo/adapter"
+	"github.com/metacubex/mihomo/adapter/provider"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,13 +59,11 @@ type RawConfig struct {
 func main() {
 	flag.Parse()
 
-	C.UA = "clash.meta"
-
 	if *configPathConfig == "" {
 		log.Fatalln("Please specify the configuration file")
 	}
 
-	var allProxies = make(map[string]CProxy)
+	allProxies := make(map[string]CProxy)
 	for _, configPath := range strings.Split(*configPathConfig, ",") {
 		var body []byte
 		var err error

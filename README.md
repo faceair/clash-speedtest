@@ -1,11 +1,11 @@
 # Clash-SpeedTest
 
-基于 Clash 核心的测速工具，快速测试你的节点速度。
+基于 Clash/Mihomo 核心的测速工具，快速测试你的节点速度。
 
 Features:
-1. 无需额外的配置，直接将 Clash 配置本地文件路径或者订阅地址作为参数传入即可
-2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Clash 一致
-3. 不依赖额外的 Clash 进程实例，单一工具即可完成测试
+1. 无需额外的配置，直接将 Clash/Mihomo 配置本地文件路径或者订阅地址作为参数传入即可
+2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Mihomo Alpha 一致
+3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
 
 <img width="801" alt="image" src="https://user-images.githubusercontent.com/3659110/236233818-d149c5a9-8e62-437f-8c67-55341984184d.png">
@@ -35,7 +35,7 @@ Usage of clash-speedtest:
         timeout for testing proxies (default 5s)
   -l string
         liveness object, support http(s) url, support payload too (default "https://speed.cloudflare.com/__down?bytes=%d")
-        
+
 
 # 演示：
 # 1. 测试全部节点，使用 HTTP 订阅地址
@@ -52,13 +52,13 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 > clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
 # 3. 使用自定义服务器进行测试（ip地址为示例，并无实际效果）
 > clash-speedtest -c "https://domain/rules" -l "http://1.1.1.1:8080/_down?bytes=%d" --size 10200
-节点                                            带宽            延迟          
-FORWARD-STEAM-COM                               9.27KB/s        310.00ms    
-FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms     
-HK-COMMON                                       60.94KB/s       158.00ms    
-TOKYO-PCCW                                      21.83KB/s       364.00ms    
-TW-IEPL-01                                      109.34KB/s      73.00ms     
-USA-GIA                                         14.42KB/s       688.00ms 
+节点                                            带宽            延迟
+FORWARD-STEAM-COM                               9.27KB/s        310.00ms
+FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms
+HK-COMMON                                       60.94KB/s       158.00ms
+TOKYO-PCCW                                      21.83KB/s       364.00ms
+TW-IEPL-01                                      109.34KB/s      73.00ms
+USA-GIA                                         14.42KB/s       688.00ms
 ```
 
 > 当您指定了 `--output yaml` 的时候，会自动将排序后的节点以完整配置输出，方便您编辑自己的节点文件
