@@ -31,11 +31,18 @@ Usage of clash-speedtest:
         timeout for testing proxies (default 5s)
   -concurrent int
         download concurrent size (default 4)
-
+  -output string
+        output config file path (default "")
+  -max-latency duration
+        filter latency greater than this value (default 800ms)
+  -min-speed float
+        filter speed less than this value(unit: MB/s) (default 5)
 
 # 演示：
+
 # 1. 测试全部节点，使用 HTTP 订阅地址
 > clash-speedtest -c 'https://domain.com/link/hash?clash=1'
+
 # 2. 测试香港节点，使用正则表达式过滤，使用本地文件
 > clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港'
 节点                                        	带宽          	延迟
@@ -44,31 +51,23 @@ Premium|广港|IEPL|02                        	N/A         	N/A
 Premium|广港|IEPL|03                        	2.62MB/s    	333.00ms
 Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
 Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
+
 # 3. 当然你也可以混合使用
 > clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
-# 3. 使用自定义服务器进行测试（ip地址为示例，并无实际效果）
-> clash-speedtest -c "https://domain/rules" -download-url "http://1.1.1.1:8080/_down?bytes=%d" --download-size 10200
-节点                                            带宽            延迟
-FORWARD-STEAM-COM                               9.27KB/s        310.00ms
-FORWARD-STEAM-COM-BAK                           137.41KB/s      68.00ms
-HK-COMMON                                       60.94KB/s       158.00ms
-TOKYO-PCCW                                      21.83KB/s       364.00ms
-TW-IEPL-01                                      109.34KB/s      73.00ms
-USA-GIA                                         14.42KB/s       688.00ms
 ```
 
-## 如何使用自定义服务器进行测速
+## 输出过滤后的配置
 
-```shell
-# 在您需要进行测速的服务器上启动服务端
-> go install github.com/faceair/clash-speedtest/download-server
-> download-server
-# 此时使用 http://ip:8080/_down?bytes=%d 作为 payload 即可，测试完成记得关闭以免被刷流量
+```bash
+# 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点
+> clash-speedtest -c "https://domain.com/link/hash?clash=1" -output filtered.yaml -max-latency 800ms -min-speed 5
 ```
 
-## 速度测试原理
+筛选后的配置文件可以直接粘贴到 Clash/Mihomo 中使用，或是贴到 Gist 上通过 Proxy Provider 引用。
 
-通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com/__down?bytes=104857600 (100MB) 进行测试，计算下载时间得到下载速度。
+## 测速服务器
+
+通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (100MB) 进行测试，计算下载时间得到下载速度。
 
 测试结果：
 1. 带宽 是指下载指定大小文件的速度，即一般理解中的下载速度。当这个数值越高时表明节点的出口带宽越大。
@@ -77,6 +76,19 @@ USA-GIA                                         14.42KB/s       688.00ms
 请注意带宽跟延迟是两个独立的指标，两者并不关联：
 1. 可能带宽很高但是延迟也很高，这种情况下你下载速度很快但是打开网页的时候却很慢，可能是是中转节点没有 BGP 加速，但出海线路带宽很充足。
 2. 可能带宽很低但是延迟也很低，这种情况下你打开网页的时候很快但是下载速度很慢，可能是中转节点有 BGP 加速，但出海线路的 IEPL、IPLC 带宽很小。
+
+Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海外绝大部分的节点速度都很快，一般情况下都没有必要自建测速服务器。
+
+如果你不想使用 Cloudflare 的测速服务器，可以自己搭建一个测速服务器。
+
+```shell
+# 在您需要进行测速的服务器上安装和启动测速服务器
+> go install github.com/faceair/clash-speedtest/download-server
+> download-server
+
+# 此时在本地使用 http://your-server-ip:8080 作为 download-url 即可
+> clash-speedtest --download-url "http://your-server-ip:8080"
+```
 
 ## License
 

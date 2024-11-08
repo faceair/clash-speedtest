@@ -43,7 +43,7 @@ func New(config *Config) *SpeedTester {
 
 type CProxy struct {
 	constant.Proxy
-	Config any
+	Config map[string]any
 }
 
 type RawConfig struct {
@@ -135,17 +135,19 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *Result)) error {
 	for name, proxy := range proxies {
-		fn(st.testProxy(name, proxy.Proxy))
+		fn(st.testProxy(name, proxy))
 	}
 	return nil
 }
 
 type Result struct {
-	ProxyName     string        `json:"proxy_name"`
-	Latency       time.Duration `json:"latency"`
-	DownloadSize  float64       `json:"download_size"`
-	DownloadTime  time.Duration `json:"download_time"`
-	DownloadSpeed float64       `json:"download_speed"`
+	ProxyName     string         `json:"proxy_name"`
+	ProxyType     string         `json:"proxy_type"`
+	ProxyConfig   map[string]any `json:"proxy_config"`
+	Latency       time.Duration  `json:"latency"`
+	DownloadSize  float64        `json:"download_size"`
+	DownloadTime  time.Duration  `json:"download_time"`
+	DownloadSpeed float64        `json:"download_speed"`
 }
 
 func (r *Result) FormatDownloadSpeed() string {
@@ -170,9 +172,10 @@ func (r *Result) FormatLatency() string {
 	return fmt.Sprintf("%dms", r.Latency.Milliseconds())
 }
 
-func (st *SpeedTester) testProxy(name string, proxy constant.Proxy) *Result {
+func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	chunkSize := st.config.DownloadSize / st.config.Concurrent
 
+	var totalCount int64
 	var totalLatency int64
 	var totalDownloadSize int64
 
@@ -184,9 +187,10 @@ func (st *SpeedTester) testProxy(name string, proxy constant.Proxy) *Result {
 			defer wg.Done()
 
 			result := st.testSingleConnection(name, proxy, chunkSize)
-			if result.DownloadSize != -1 {
-				atomic.AddInt64(&totalDownloadSize, int64(result.DownloadSize))
+			if result.DownloadSize != 0 {
+				atomic.AddInt64(&totalCount, 1)
 				atomic.AddInt64(&totalLatency, int64(result.Latency))
+				atomic.AddInt64(&totalDownloadSize, int64(result.DownloadSize))
 			}
 		}()
 	}
@@ -195,7 +199,9 @@ func (st *SpeedTester) testProxy(name string, proxy constant.Proxy) *Result {
 
 	return &Result{
 		ProxyName:     name,
-		Latency:       time.Duration(totalLatency / int64(st.config.Concurrent)),
+		ProxyType:     proxy.Type().String(),
+		ProxyConfig:   proxy.Config,
+		Latency:       time.Duration(totalLatency / max(totalCount, 1)),
 		DownloadSize:  float64(totalDownloadSize),
 		DownloadTime:  totalDownloadTime,
 		DownloadSpeed: float64(totalDownloadSize) / totalDownloadTime.Seconds(),
@@ -224,21 +230,18 @@ func (st *SpeedTester) testSingleConnection(name string, proxy constant.Proxy, d
 	}
 
 	start := time.Now()
-	resp, err := client.Get(fmt.Sprintf(st.config.DownloadURL, downloadSize))
+	resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=%d", st.config.DownloadURL, downloadSize))
 	if err != nil {
-		return &Result{name, -1, -1, -1, -1}
+		return &Result{}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &Result{name, -1, -1, -1, -1}
+		return &Result{}
 	}
 	latency := time.Since(start)
 
-	downloadBytes, err := io.Copy(io.Discard, resp.Body)
-	if err != nil {
-		return &Result{name, -1, -1, -1, -1}
-	}
+	downloadBytes, _ := io.Copy(io.Discard, resp.Body)
 	downloadTime := time.Since(start) - latency
 
 	return &Result{
