@@ -61,9 +61,8 @@ USA-GIA                                         14.42KB/s       688.00ms
 
 ```shell
 # 在您需要进行测速的服务器上启动服务端
-$ cd download-server
-$ go build .
-$ ./download-server
+> go install github.com/faceair/clash-speedtest/download-server
+> download-server
 # 此时使用 http://ip:8080/_down?bytes=%d 作为 payload 即可，测试完成记得关闭以免被刷流量
 ```
 
