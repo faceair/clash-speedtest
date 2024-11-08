@@ -1,9 +1,12 @@
 module github.com/faceair/clash-speedtest
 
-go 1.20
+go 1.22
+
+toolchain go1.23.3
 
 require (
 	github.com/metacubex/mihomo v1.18.10
+	github.com/schollz/progressbar/v3 v3.17.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -56,6 +59,7 @@ require (
 	github.com/metacubex/utls v1.6.6 // indirect
 	github.com/metacubex/wireguard-go v0.0.0-20240922131502-c182e7471181 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mroth/weightedrand/v2 v2.1.0 // indirect
 	github.com/oasisprotocol/deoxysii v0.0.0-20220228165953-2091330c22b7 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
@@ -65,6 +69,7 @@ require (
 	github.com/puzpuzpuz/xsync/v3 v3.4.0 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/qtls-go1-20 v0.4.1 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagernet/fswatch v0.1.1 // indirect
 	github.com/sagernet/sing v0.5.0-rc.4 // indirect
 	github.com/sagernet/sing-mux v0.2.1-0.20240124034317-9bfb33698bb6 // indirect
@@ -92,6 +97,7 @@ require (
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/term v0.25.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
