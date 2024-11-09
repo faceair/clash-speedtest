@@ -4,7 +4,7 @@
 
 Features:
 1. 无需额外的配置，直接将 Clash/Mihomo 配置本地文件路径或者订阅地址作为参数传入即可
-2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Mihomo Alpha 一致
+2. 支持 Proxies 和 Proxy Provider 中定义的全部类型代理节点，兼容性跟 Mihomo 一致
 3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
 
@@ -24,7 +24,7 @@ Usage of clash-speedtest:
   -f string
         filter proxies by name, use regexp (default ".*")
   -download-url string
-        download url for testing proxies (default "https://speed.cloudflare.com/__down?bytes=%d")
+        download url for testing proxies (default "https://speed.cloudflare.com")
   -download-size int
         download size for testing proxies (default 104857600)
   -timeout duration
@@ -54,12 +54,8 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 # 3. 当然你也可以混合使用
 > clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
-```
 
-## 输出过滤后的配置
-
-```bash
-# 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点
+# 4. 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点，并输出到 filtered.yaml
 > clash-speedtest -c "https://domain.com/link/hash?clash=1" -output filtered.yaml -max-latency 800ms -min-speed 5
 ```
 
@@ -67,7 +63,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 演示项目：[https://github.com/faceair/freesub](https://github.com/faceair/freesub) 通过 Github Action 使用本工具对免费订阅进行测速，并保存结果。
 
-## 测速服务器
+## 测速原理
 
 通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (100MB) 进行测试，计算下载时间得到下载速度。
 
