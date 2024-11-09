@@ -14,7 +14,7 @@ Features:
 
 ```bash
 # 支持从源码安装，或从 Release 里下载由 Github Action 自动构建的二进制文件
-> go install github.com/faceair/clash-speedtest
+> go install github.com/faceair/clash-speedtest@latest
 
 # 查看帮助
 > clash-speedtest -h
@@ -83,7 +83,7 @@ Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海�
 
 ```shell
 # 在您需要进行测速的服务器上安装和启动测速服务器
-> go install github.com/faceair/clash-speedtest/download-server
+> go install github.com/faceair/clash-speedtest/download-server@latest
 > download-server
 
 # 此时在本地使用 http://your-server-ip:8080 作为 server-url 即可
