@@ -8,7 +8,7 @@ Features:
 3. 不依赖额外的 Clash/Mihomo 进程实例，单一工具即可完成测试
 4. 代码简单而且开源，不发布构建好的二进制文件，保证你的节点安全
 
-<img width="801" alt="image" src="https://user-images.githubusercontent.com/3659110/236233818-d149c5a9-8e62-437f-8c67-55341984184d.png">
+<img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
 ## 使用方法
 
