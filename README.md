@@ -41,7 +41,8 @@ Usage of clash-speedtest:
 # 演示：
 
 # 1. 测试全部节点，使用 HTTP 订阅地址
-> clash-speedtest -c 'https://domain.com/link/hash?clash=1'
+# 请在订阅地址后面带上 flag=meta 参数，否则无法识别出节点类型
+> clash-speedtest -c 'https://domain.com/api/v1/client/subscribe?token=secret&flag=meta'
 
 # 2. 测试香港节点，使用正则表达式过滤，使用本地文件
 > clash-speedtest -c ~/.config/clash/config.yaml -f 'HK|港'
@@ -53,13 +54,12 @@ Premium|广港|IEPL|04                        	1.46MB/s    	272.00ms
 Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 # 3. 当然你也可以混合使用
-> clash-speedtest -c "https://domain.com/link/hash?clash=1,/home/.config/clash/config.yaml"
+> clash-speedtest -c "https://domain.com/api/v1/client/subscribe?token=secret&flag=meta,/home/.config/clash/config.yaml"
 
 # 4. 筛选出延迟低于 800ms 且下载速度大于 5MB/s 的节点，并输出到 filtered.yaml
-> clash-speedtest -c "https://domain.com/link/hash?clash=1" -output filtered.yaml -max-latency 800ms -min-speed 5
+> clash-speedtest -c "https://domain.com/api/v1/client/subscribe?token=secret&flag=meta" -output filtered.yaml -max-latency 800ms -min-speed 5
+# 筛选后的配置文件可以直接粘贴到 Clash/Mihomo 中使用，或是贴到 Github\Gist 上通过 Proxy Provider 引用。
 ```
-
-筛选后的配置文件可以直接粘贴到 Clash/Mihomo 中使用，或是贴到 Gist 上通过 Proxy Provider 引用。
 
 演示项目：[https://github.com/faceair/freesub](https://github.com/faceair/freesub) 通过 Github Action 使用本工具对免费订阅进行测速，并保存结果。
 
