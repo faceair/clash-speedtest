@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/metacubex/mihomo/log"
+	"github.com/olekukonko/tablewriter"
 	"github.com/schollz/progressbar/v3"
 	"gopkg.in/yaml.v3"
 )
@@ -17,8 +17,9 @@ import (
 var (
 	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
 	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
-	downloadURL       = flag.String("download-url", "https://speed.cloudflare.com", "download url")
-	downloadSize      = flag.Int("download-size", 100*1024*1024, "download size for testing proxies")
+	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "server url")
+	downloadSize      = flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
+	uploadSize        = flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
 	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
@@ -44,8 +45,9 @@ func main() {
 	speedTester := speedtester.New(&speedtester.Config{
 		ConfigPaths:  *configPathsConfig,
 		FilterRegex:  *filterRegexConfig,
-		DownloadURL:  *downloadURL,
+		ServerURL:    *serverURL,
 		DownloadSize: *downloadSize,
+		UploadSize:   *uploadSize,
 		Timeout:      *timeout,
 		Concurrent:   *concurrent,
 	})
@@ -57,14 +59,11 @@ func main() {
 
 	bar := progressbar.Default(int64(len(allProxies)), "测试中...")
 	results := make([]*speedtester.Result, 0)
-	err = speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+	speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
 		bar.Add(1)
 		bar.Describe(result.ProxyName)
 		results = append(results, result)
 	})
-	if err != nil {
-		log.Fatalln("test proxies failed: %v", err)
-	}
 
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].DownloadSpeed > results[j].DownloadSpeed
@@ -82,33 +81,110 @@ func main() {
 }
 
 func printResults(results []*speedtester.Result) {
-	fmt.Printf("\n%-4s %-40s %-15s %-12s %-12s\n", "", "节点名称", "节点类型", "下载速度", "延迟")
-	fmt.Printf("%-4s %s\n", "", strings.Repeat("-", 100))
+	table := tablewriter.NewWriter(os.Stdout)
+
+	table.SetHeader([]string{
+		"序号",
+		"节点名称",
+		"类型",
+		"延迟",
+		"抖动",
+		"丢包率",
+		"下载速度",
+		"上传速度",
+	})
+
+	table.SetAutoWrapText(false)
+	table.SetAutoFormatHeaders(true)
+	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+	table.SetCenterSeparator("")
+	table.SetColumnSeparator("")
+	table.SetRowSeparator("")
+	table.SetHeaderLine(false)
+	table.SetBorder(false)
+	table.SetTablePadding("\t")
+	table.SetNoWhiteSpace(true)
 
 	for i, result := range results {
-		speedStr := result.FormatDownloadSpeed()
+		idStr := fmt.Sprintf("%d.", i+1)
 
-		proxyName := fmt.Sprintf("%-40s", result.ProxyName)
-
-		color := ""
-		speed := float64(result.DownloadSpeed) / (1024 * 1024) // 转换为 MB/s
-		if speedStr == "0.00B/s" {
-			color = colorRed
-		} else if speed >= 10 {
-			color = colorGreen
+		// 延迟颜色
+		latencyStr := result.FormatLatency()
+		if result.Latency > 0 {
+			if result.Latency < 800*time.Millisecond {
+				latencyStr = colorGreen + latencyStr + colorReset
+			} else if result.Latency < 1500*time.Millisecond {
+				latencyStr = colorYellow + latencyStr + colorReset
+			} else {
+				latencyStr = colorRed + latencyStr + colorReset
+			}
+		} else {
+			latencyStr = colorRed + latencyStr + colorReset
 		}
 
-		index := fmt.Sprintf("%d.", i+1)
-		fmt.Printf("%-4s %s%-40s %-15s %-12s %-12s%s\n",
-			index,
-			color,
-			proxyName,
+		jitterStr := result.FormatJitter()
+		if result.Jitter > 0 {
+			if result.Jitter < 800*time.Millisecond {
+				jitterStr = colorGreen + jitterStr + colorReset
+			} else if result.Jitter < 1500*time.Millisecond {
+				jitterStr = colorYellow + jitterStr + colorReset
+			} else {
+				jitterStr = colorRed + jitterStr + colorReset
+			}
+		} else {
+			jitterStr = colorRed + jitterStr + colorReset
+		}
+
+		// 丢包率颜色
+		packetLossStr := result.FormatPacketLoss()
+		if result.PacketLoss < 10 {
+			packetLossStr = colorGreen + packetLossStr + colorReset
+		} else if result.PacketLoss < 20 {
+			packetLossStr = colorYellow + packetLossStr + colorReset
+		} else {
+			packetLossStr = colorRed + packetLossStr + colorReset
+		}
+
+		// 下载速度颜色 (以MB/s为单位判断)
+		downloadSpeed := result.DownloadSpeed / (1024 * 1024)
+		downloadSpeedStr := result.FormatDownloadSpeed()
+		if downloadSpeed >= 10 {
+			downloadSpeedStr = colorGreen + downloadSpeedStr + colorReset
+		} else if downloadSpeed >= 5 {
+			downloadSpeedStr = colorYellow + downloadSpeedStr + colorReset
+		} else {
+			downloadSpeedStr = colorRed + downloadSpeedStr + colorReset
+		}
+
+		// 上传速度颜色
+		uploadSpeed := result.UploadSpeed / (1024 * 1024)
+		uploadSpeedStr := result.FormatUploadSpeed()
+		if uploadSpeed >= 5 {
+			uploadSpeedStr = colorGreen + uploadSpeedStr + colorReset
+		} else if uploadSpeed >= 2 {
+			uploadSpeedStr = colorYellow + uploadSpeedStr + colorReset
+		} else {
+			uploadSpeedStr = colorRed + uploadSpeedStr + colorReset
+		}
+
+		row := []string{
+			idStr,
+			result.ProxyName,
 			result.ProxyType,
-			speedStr,
-			result.FormatLatency(),
-			colorReset,
-		)
+			latencyStr,
+			jitterStr,
+			packetLossStr,
+			downloadSpeedStr,
+			uploadSpeedStr,
+		}
+
+		table.Append(row)
 	}
+
+	fmt.Println()
+	table.Render()
+	fmt.Println()
 }
 
 func saveConfig(results []*speedtester.Result) error {

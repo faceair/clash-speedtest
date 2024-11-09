@@ -1,11 +1,10 @@
 module github.com/faceair/clash-speedtest
 
-go 1.22
-
-toolchain go1.23.3
+go 1.23
 
 require (
 	github.com/metacubex/mihomo v1.18.10
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/schollz/progressbar/v3 v3.17.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -41,6 +40,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 // indirect
+	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/metacubex/amneziawg-go v0.0.0-20240922133038-fdf3a4d5a4ab // indirect

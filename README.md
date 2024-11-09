@@ -23,10 +23,12 @@ Usage of clash-speedtest:
         configuration file path, also support http(s) url
   -f string
         filter proxies by name, use regexp (default ".*")
-  -download-url string
-        download url for testing proxies (default "https://speed.cloudflare.com")
+  -server-url string
+        server url for testing proxies (default "https://speed.cloudflare.com")
   -download-size int
-        download size for testing proxies (default 104857600)
+        download size for testing proxies (default 50MB)
+  -upload-size int
+        upload size for testing proxies (default 20MB)
   -timeout duration
         timeout for testing proxies (default 5s)
   -concurrent int
@@ -65,7 +67,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 ## 测速原理
 
-通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (100MB) 进行测试，计算下载时间得到下载速度。
+通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (50MB) 进行测试，计算下载时间得到下载速度。
 
 测试结果：
 1. 带宽 是指下载指定大小文件的速度，即一般理解中的下载速度。当这个数值越高时表明节点的出口带宽越大。
@@ -84,8 +86,8 @@ Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海�
 > go install github.com/faceair/clash-speedtest/download-server
 > download-server
 
-# 此时在本地使用 http://your-server-ip:8080 作为 download-url 即可
-> clash-speedtest --download-url "http://your-server-ip:8080"
+# 此时在本地使用 http://your-server-ip:8080 作为 server-url 即可
+> clash-speedtest --server-url "http://your-server-ip:8080"
 ```
 
 ## License
