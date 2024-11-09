@@ -65,6 +65,8 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 筛选后的配置文件可以直接粘贴到 Clash/Mihomo 中使用，或是贴到 Gist 上通过 Proxy Provider 引用。
 
+演示项目：[https://github.com/faceair/freesub](https://github.com/faceair/freesub) 通过 Github Action 使用本工具对免费订阅进行测速，并保存结果。
+
 ## 测速服务器
 
 通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (100MB) 进行测试，计算下载时间得到下载速度。
