@@ -13,7 +13,7 @@ Features:
 ## 使用方法
 
 ```bash
-# 推荐从源码安装
+# 支持从源码安装，或从 Release 里下载由 Github Action 自动构建的二进制文件
 > go install github.com/faceair/clash-speedtest
 
 # 查看帮助
