@@ -197,10 +197,10 @@ func saveConfig(results []*speedtester.Result) error {
 		if *maxLatency > 0 && result.Latency > *maxLatency {
 			continue
 		}
-		if *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed {
+		if *downloadSize > 0 && *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed {
 			continue
 		}
-		if *minUploadSpeed > 0 && result.UploadSpeed < *minUploadSpeed {
+		if *uploadSize > 0 && *minUploadSpeed > 0 && result.UploadSpeed < *minUploadSpeed {
 			continue
 		}
 		filteredResults = append(filteredResults, result)
