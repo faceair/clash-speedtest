@@ -117,8 +117,32 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			if err := pd.Initial(); err != nil {
 				return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 			}
+
+			resp, err := http.Get(config["url"].(string))
+			if err != nil {
+				log.Warnln("failed to fetch config: %s", err)
+				continue
+			}
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			pdRawCfg := &RawConfig{
+				Proxies: []map[string]any{},
+			}
+			if err := yaml.Unmarshal(body, pdRawCfg); err != nil {
+				return nil, err
+			}
+			pdProxies := make(map[string]map[string]any)
+			for _, pdProxy := range pdRawCfg.Proxies {
+				pdProxies[pdProxy["name"].(string)] = pdProxy
+			}
+
 			for _, proxy := range pd.Proxies() {
-				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{Proxy: proxy, Config: config}
+				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{
+					Proxy:  proxy,
+					Config: pdProxies[proxy.Name()],
+				}
 			}
 		}
 		for k, p := range proxies {
