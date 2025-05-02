@@ -24,7 +24,8 @@ var (
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
 	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
-	minSpeed          = flag.Float64("min-speed", 5, "filter speed less than this value(unit: MB/s)")
+	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
+	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
 )
 
 const (
@@ -43,13 +44,16 @@ func main() {
 	}
 
 	speedTester := speedtester.New(&speedtester.Config{
-		ConfigPaths:  *configPathsConfig,
-		FilterRegex:  *filterRegexConfig,
-		ServerURL:    *serverURL,
-		DownloadSize: *downloadSize,
-		UploadSize:   *uploadSize,
-		Timeout:      *timeout,
-		Concurrent:   *concurrent,
+		ConfigPaths:      *configPathsConfig,
+		FilterRegex:      *filterRegexConfig,
+		ServerURL:        *serverURL,
+		DownloadSize:     *downloadSize,
+		UploadSize:       *uploadSize,
+		Timeout:          *timeout,
+		Concurrent:       *concurrent,
+		MaxLatency:       *maxLatency,
+		MinDownloadSpeed: *minDownloadSpeed,
+		MinUploadSpeed:   *minUploadSpeed,
 	})
 
 	allProxies, err := speedTester.LoadProxies()
@@ -193,7 +197,10 @@ func saveConfig(results []*speedtester.Result) error {
 		if *maxLatency > 0 && result.Latency > *maxLatency {
 			continue
 		}
-		if *minSpeed > 0 && float64(result.DownloadSpeed)/(1024*1024) < *minSpeed {
+		if *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed {
+			continue
+		}
+		if *minUploadSpeed > 0 && result.UploadSpeed < *minUploadSpeed {
 			continue
 		}
 		filteredResults = append(filteredResults, result)
