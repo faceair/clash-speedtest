@@ -42,10 +42,10 @@ func New(config *Config) *SpeedTester {
 	if config.Concurrent <= 0 {
 		config.Concurrent = 1
 	}
-	if config.DownloadSize <= 0 {
+	if config.DownloadSize < 0 {
 		config.DownloadSize = 100 * 1024 * 1024
 	}
-	if config.UploadSize <= 0 {
+	if config.UploadSize < 0 {
 		config.UploadSize = 10 * 1024 * 1024
 	}
 	return &SpeedTester{
