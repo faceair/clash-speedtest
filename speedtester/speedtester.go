@@ -255,9 +255,11 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		}
 		close(downloadResults)
 
-		result.DownloadSize = float64(totalDownloadBytes)
-		result.DownloadTime = totalDownloadTime / time.Duration(downloadCount)
-		result.DownloadSpeed = float64(totalDownloadBytes) / result.DownloadTime.Seconds()
+		if downloadCount > 0 {
+			result.DownloadSize = float64(totalDownloadBytes)
+			result.DownloadTime = totalDownloadTime / time.Duration(downloadCount)
+			result.DownloadSpeed = float64(totalDownloadBytes) / result.DownloadTime.Seconds()
+		}
 
 		if result.DownloadSpeed < st.config.MinDownloadSpeed {
 			return result
@@ -286,9 +288,11 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		}
 		close(uploadResults)
 
-		result.UploadSize = float64(totalUploadBytes)
-		result.UploadTime = totalUploadTime / time.Duration(uploadCount)
-		result.UploadSpeed = float64(totalUploadBytes) / result.UploadTime.Seconds()
+		if uploadCount > 0 {
+			result.UploadSize = float64(totalUploadBytes)
+			result.UploadTime = totalUploadTime / time.Duration(uploadCount)
+			result.UploadSpeed = float64(totalUploadBytes) / result.UploadTime.Seconds()
+		}
 
 		if result.UploadSpeed < st.config.MinUploadSpeed {
 			return result
