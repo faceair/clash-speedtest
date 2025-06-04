@@ -63,7 +63,7 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
+func (st *SpeedTester) LoadProxies(onlyIPV4 bool) (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
 
 	for _, configPath := range strings.Split(st.config.ConfigPaths, ",") {
@@ -137,11 +137,12 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			for _, pdProxy := range pdRawCfg.Proxies {
 				pdProxies[pdProxy["name"].(string)] = pdProxy
 			}
-
 			for _, proxy := range pd.Proxies() {
+				config := pdProxies[proxy.Name()]
+
 				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{
 					Proxy:  proxy,
-					Config: pdProxies[proxy.Name()],
+					Config: config,
 				}
 			}
 		}
@@ -149,9 +150,16 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			switch p.Type() {
 			case constant.Shadowsocks, constant.ShadowsocksR, constant.Snell, constant.Socks5, constant.Http,
 				constant.Vmess, constant.Vless, constant.Trojan, constant.Hysteria, constant.Hysteria2,
-				constant.WireGuard, constant.Tuic, constant.Ssh:
+				constant.WireGuard, constant.Tuic, constant.Ssh, constant.Mieru, constant.AnyTLS:
 			default:
 				continue
+			}
+			if onlyIPV4 {
+				server := toIPv4(p.Config["server"].(string))
+				if server == "" {
+					continue
+				}
+				p.Config["server"] = server
 			}
 			if _, ok := allProxies[k]; !ok {
 				allProxies[k] = p
@@ -457,4 +465,21 @@ func calculateLatencyStats(latencies []time.Duration, failedPings int) *latencyR
 	result.jitter = time.Duration(math.Sqrt(variance))
 
 	return result
+}
+
+func toIPv4(server string) string {
+	ip := net.ParseIP(server)
+	if ip != nil && ip.To4() != nil {
+		return ip.String()
+	}
+	ips, err := net.LookupIP(server)
+	if err != nil {
+		return ""
+	}
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			return server
+		}
+	}
+	return ""
 }
