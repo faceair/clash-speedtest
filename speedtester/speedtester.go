@@ -138,11 +138,9 @@ func (st *SpeedTester) LoadProxies(onlyIPV4 bool) (map[string]*CProxy, error) {
 				pdProxies[pdProxy["name"].(string)] = pdProxy
 			}
 			for _, proxy := range pd.Proxies() {
-				config := pdProxies[proxy.Name()]
-
 				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{
 					Proxy:  proxy,
-					Config: config,
+					Config: pdProxies[proxy.Name()],
 				}
 			}
 		}
