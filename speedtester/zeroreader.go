@@ -22,16 +22,10 @@ func (r *ZeroReader) Read(p []byte) (n int, err error) {
 	if r.remainBytes <= 0 {
 		return 0, io.EOF
 	}
-	toRead := int64(len(p))
-	if toRead > r.remainBytes {
-		toRead = r.remainBytes
-	}
+	toRead := min(int64(len(p)), r.remainBytes)
 	bytesWritten := int64(0)
 	for bytesWritten < toRead {
-		chunk := toRead - bytesWritten
-		if chunk > int64(len(zeroBytes)) {
-			chunk = int64(len(zeroBytes))
-		}
+		chunk := min(toRead-bytesWritten, int64(len(zeroBytes)))
 		copy(p[bytesWritten:], zeroBytes[:chunk])
 		bytesWritten += chunk
 	}

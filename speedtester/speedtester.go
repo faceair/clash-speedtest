@@ -152,6 +152,9 @@ func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, er
 			default:
 				continue
 			}
+			if server, ok := p.Config["server"]; ok {
+				p.Config["server"] = convertMappedIPv6ToIPv4(server.(string))
+			}
 			if stashCompatible && !isStashCompatible(p) {
 				continue
 			}
@@ -546,4 +549,15 @@ func calculateLatencyStats(latencies []time.Duration, failedPings int) *latencyR
 	result.jitter = time.Duration(math.Sqrt(variance))
 
 	return result
+}
+
+func convertMappedIPv6ToIPv4(server string) string {
+	ip := net.ParseIP(server)
+	if ip == nil {
+		return server
+	}
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4.String()
+	}
+	return server
 }
