@@ -23,6 +23,7 @@ var (
 	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
+	stashCompatible   = flag.Bool("stash-compatible", false, "enable stash compatible mode")
 	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
@@ -56,7 +57,7 @@ func main() {
 		MinUploadSpeed:   *minUploadSpeed,
 	})
 
-	allProxies, err := speedTester.LoadProxies()
+	allProxies, err := speedTester.LoadProxies(*stashCompatible)
 	if err != nil {
 		log.Fatalln("load proxies failed: %v", err)
 	}

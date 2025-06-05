@@ -63,7 +63,7 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
+func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
 
 	for _, configPath := range strings.Split(st.config.ConfigPaths, ",") {
@@ -152,6 +152,9 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			default:
 				continue
 			}
+			if stashCompatible && !isStashCompatible(p) {
+				continue
+			}
 			if _, ok := allProxies[k]; !ok {
 				allProxies[k] = p
 			}
@@ -166,6 +169,93 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		}
 	}
 	return filteredProxies, nil
+}
+
+func isStashCompatible(proxy *CProxy) bool {
+	switch proxy.Type() {
+	case constant.Shadowsocks:
+		cipher, ok := proxy.Config["cipher"]
+		if ok {
+			switch cipher {
+			case "aes-128-gcm", "aes-192-gcm", "aes-256-gcm",
+				"aes-128-cfb", "aes-192-cfb", "aes-256-cfb",
+				"aes-128-ctr", "aes-192-ctr", "aes-256-ctr",
+				"rc4-md5", "chacha20", "chacha20-ietf", "xchacha20",
+				"chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
+				"2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm":
+			default:
+				return false
+			}
+		}
+	case constant.ShadowsocksR:
+		if obfs, ok := proxy.Config["obfs"]; ok {
+			switch obfs {
+			case "plain", "http_simple", "http_post", "random_head",
+				"tls1.2_ticket_auth", "tls1.2_ticket_fastauth":
+			default:
+				return false
+			}
+		}
+		if protocol, ok := proxy.Config["protocol"]; ok {
+			switch protocol {
+			case "origin", "auth_sha1_v4", "auth_aes128_md5",
+				"auth_aes128_sha1", "auth_chain_a", "auth_chain_b":
+			default:
+				return false
+			}
+		}
+	case constant.Snell:
+		if obfsOpts, ok := proxy.Config["obfs-opts"]; ok {
+			if obfsOptsMap, ok := obfsOpts.(map[string]any); ok {
+				if mode, ok := obfsOptsMap["mode"]; ok {
+					switch mode {
+					case "http", "tls":
+					default:
+						return false
+					}
+				}
+			}
+		}
+	case constant.Socks5, constant.Http:
+	case constant.Vmess:
+		if cipher, ok := proxy.Config["cipher"]; ok {
+			switch cipher {
+			case "auto", "aes-128-gcm", "chacha20-poly1305", "none":
+			default:
+				return false
+			}
+		}
+		if network, ok := proxy.Config["network"]; ok {
+			switch network {
+			case "ws", "h2", "http", "grpc":
+			default:
+				return false
+			}
+		}
+	case constant.Vless:
+		if flow, ok := proxy.Config["flow"]; ok {
+			switch flow {
+			case "xtls-rprx-origin", "xtls-rprx-direct", "xtls-rprx-splice", "xtls-rprx-vision":
+			default:
+				return false
+			}
+		}
+	case constant.Trojan:
+		if network, ok := proxy.Config["network"]; ok {
+			switch network {
+			case "ws", "grpc":
+			default:
+				return false
+			}
+		}
+	case constant.Hysteria, constant.Hysteria2:
+	case constant.WireGuard:
+	case constant.Tuic:
+	case constant.Ssh:
+	default:
+		return false
+	}
+	return true
 }
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *Result)) {
