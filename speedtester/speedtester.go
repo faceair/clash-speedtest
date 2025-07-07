@@ -24,6 +24,7 @@ import (
 type Config struct {
 	ConfigPaths      string
 	FilterRegex      string
+	BlockRegex       string
 	ServerURL        string
 	DownloadSize     int
 	UploadSize       int
@@ -35,7 +36,9 @@ type Config struct {
 }
 
 type SpeedTester struct {
-	config *Config
+	config           *Config
+	blockedNodes     []string
+	blockedNodeCount int
 }
 
 func New(config *Config) *SpeedTester {
@@ -65,6 +68,8 @@ type RawConfig struct {
 
 func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
+	st.blockedNodes = make([]string, 0)
+	st.blockedNodeCount = 0
 
 	for _, configPath := range strings.Split(st.config.ConfigPaths, ",") {
 		var body []byte
@@ -165,8 +170,32 @@ func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, er
 	}
 
 	filterRegexp := regexp.MustCompile(st.config.FilterRegex)
+	var blockKeywords []string
+	if st.config.BlockRegex != "" {
+		for _, keyword := range strings.Split(st.config.BlockRegex, "|") {
+			keyword = strings.TrimSpace(keyword)
+			if keyword != "" {
+				blockKeywords = append(blockKeywords, strings.ToLower(keyword))
+			}
+		}
+	}
+
 	filteredProxies := make(map[string]*CProxy)
 	for name := range allProxies {
+		shouldBlock := false
+		if len(blockKeywords) > 0 {
+			lowerName := strings.ToLower(name)
+			for _, keyword := range blockKeywords {
+				if strings.Contains(lowerName, keyword) {
+					shouldBlock = true
+					break
+				}
+			}
+		}
+
+		if shouldBlock {
+			continue
+		}
 		if filterRegexp.MatchString(name) {
 			filteredProxies[name] = allProxies[name]
 		}

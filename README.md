@@ -23,6 +23,8 @@ Usage of clash-speedtest:
         configuration file path, also support http(s) url
   -f string
         filter proxies by name, use regexp (default ".*")
+  -b string
+        block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')
   -server-url string
         server url for testing proxies (default "https://speed.cloudflare.com")
   -download-size int
