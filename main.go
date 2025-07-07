@@ -21,7 +21,7 @@ import (
 var (
 	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
 	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
-	blockKeywords     = flag.String("b", "", "Use keywords to block nodes. Use vertical bars to separate multiple keywords (for example: -b 'x1|sg|hk')")
+	blockKeywords     = flag.String("b", "", "block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')")
 	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "server url")
 	downloadSize      = flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
 	uploadSize        = flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
