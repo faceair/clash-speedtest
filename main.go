@@ -21,7 +21,7 @@ import (
 var (
 	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
 	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
-	blockKeywords     = flag.String("b", "", "Use keywords to block nodes. Use vertical bars to separate multiple keywords (for example: -b 'x1|sg|hk')")
+	blockKeywords     = flag.String("b", "", "block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')")
 	serverURL         = flag.String("server-url", "https://speed.cloudflare.com", "server url")
 	downloadSize      = flag.Int("download-size", 50*1024*1024, "download size for testing proxies")
 	uploadSize        = flag.Int("upload-size", 20*1024*1024, "upload size for testing proxies")
@@ -33,6 +33,7 @@ var (
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
 	renameNodes       = flag.Bool("rename", false, "rename nodes with IP location and speed")
+	fastMode          = flag.Bool("fast", false, "fast mode, only test latency")
 )
 
 const (
@@ -62,6 +63,7 @@ func main() {
 		MaxLatency:       *maxLatency,
 		MinDownloadSpeed: *minDownloadSpeed * 1024 * 1024,
 		MinUploadSpeed:   *minUploadSpeed * 1024 * 1024,
+		FastMode:         *fastMode,
 	})
 
 	allProxies, err := speedTester.LoadProxies(*stashCompatible)
@@ -95,16 +97,27 @@ func main() {
 func printResults(results []*speedtester.Result) {
 	table := tablewriter.NewWriter(os.Stdout)
 
-	table.SetHeader([]string{
-		"序号",
-		"节点名称",
-		"类型",
-		"延迟",
-		"抖动",
-		"丢包率",
-		"下载速度",
-		"上传速度",
-	})
+	var headers []string
+	if *fastMode {
+		headers = []string{
+			"序号",
+			"节点名称",
+			"类型",
+			"延迟",
+		}
+	} else {
+		headers = []string{
+			"序号",
+			"节点名称",
+			"类型",
+			"延迟",
+			"抖动",
+			"丢包率",
+			"下载速度",
+			"上传速度",
+		}
+	}
+	table.SetHeader(headers)
 
 	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
@@ -117,6 +130,16 @@ func printResults(results []*speedtester.Result) {
 	table.SetBorder(false)
 	table.SetTablePadding("\t")
 	table.SetNoWhiteSpace(true)
+	table.SetColMinWidth(0, 4)  // 序号
+	table.SetColMinWidth(1, 20) // 节点名称
+	table.SetColMinWidth(2, 8)  // 类型
+	table.SetColMinWidth(3, 8)  // 延迟
+	if !*fastMode {
+		table.SetColMinWidth(4, 8)  // 抖动
+		table.SetColMinWidth(5, 8)  // 丢包率
+		table.SetColMinWidth(6, 12) // 下载速度
+		table.SetColMinWidth(7, 12) // 上传速度
+	}
 
 	for i, result := range results {
 		idStr := fmt.Sprintf("%d.", i+1)
@@ -180,15 +203,25 @@ func printResults(results []*speedtester.Result) {
 			uploadSpeedStr = colorRed + uploadSpeedStr + colorReset
 		}
 
-		row := []string{
-			idStr,
-			result.ProxyName,
-			result.ProxyType,
-			latencyStr,
-			jitterStr,
-			packetLossStr,
-			downloadSpeedStr,
-			uploadSpeedStr,
+		var row []string
+		if *fastMode {
+			row = []string{
+				idStr,
+				result.ProxyName,
+				result.ProxyType,
+				latencyStr,
+			}
+		} else {
+			row = []string{
+				idStr,
+				result.ProxyName,
+				result.ProxyType,
+				latencyStr,
+				jitterStr,
+				packetLossStr,
+				downloadSpeedStr,
+				uploadSpeedStr,
+			}
 		}
 
 		table.Append(row)

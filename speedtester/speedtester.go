@@ -33,6 +33,7 @@ type Config struct {
 	MaxLatency       time.Duration
 	MinDownloadSpeed float64
 	MinUploadSpeed   float64
+	FastMode         bool
 }
 
 type SpeedTester struct {
@@ -363,8 +364,12 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	// 1. 首先进行延迟测试
 	latencyResult := st.testLatency(proxy, st.config.MaxLatency)
 	result.Latency = latencyResult.avgLatency
-	result.Jitter = latencyResult.jitter
-	result.PacketLoss = latencyResult.packetLoss
+	if st.config.FastMode {
+		return result
+	} else {
+		result.Jitter = latencyResult.jitter
+		result.PacketLoss = latencyResult.packetLoss
+	}
 
 	if result.PacketLoss == 100 || result.Latency > st.config.MaxLatency {
 		return result
