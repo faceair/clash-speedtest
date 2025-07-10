@@ -7,5 +7,5 @@ go build -o clash-speedtest.exe
 ```
 
 ```
-.\clash-speedtest.exe -c "URL&flag=meta" -output normal.yaml -max-latency 800ms
+.\clash-speedtest.exe -fast -c "URL&flag=meta" -output normal.yaml -max-latency 800ms
 ```
