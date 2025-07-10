@@ -3,5 +3,9 @@
 这里列一下自己常用的命令：
 
 ```
+go build -o clash-speedtest.exe
+```
+
+```
 .\clash-speedtest.exe -c "URL&flag=meta" -output normal.yaml -max-latency 800ms
 ```
