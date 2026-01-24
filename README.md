@@ -10,11 +10,29 @@ Features:
 
 <img width="1332" alt="image" src="https://github.com/user-attachments/assets/fdc47ec5-b626-45a3-a38a-6d88c326c588">
 
+## Prerequisites/注意事项
+
+### OpenWRT 环境
+在 OpenWRT 环境下使用本工具时，建议临时关闭 OpenClash/Clash 等代理服务，以避免路由冲突影响测速结果的准确性。
+
+### Windows CMD 用户
+在 Windows CMD 中使用时，如果订阅地址包含 `&` 字符，必须使用双引号而非单引号：
+```bash
+# 正确
+> clash-speedtest -c "https://domain.com/api/v1/client/subscribe?token=secret&flag=meta"
+
+# 错误
+> clash-speedtest -c 'https://domain.com/api/v1/client/subscribe?token=secret&flag=meta'
+```
+
 ## 使用方法
 
 ```bash
 # 支持从源码安装，或从 Release 里下载由 Github Action 自动构建的二进制文件
 > go install github.com/faceair/clash-speedtest@latest
+
+# 查看版本
+> clash-speedtest -v
 
 # 查看帮助
 > clash-speedtest -h
@@ -37,8 +55,6 @@ Usage of clash-speedtest:
         download concurrent size (default 4)
   -output string
         output config file path (default "")
-  -stash-compatible
-        enable stash compatible mode
   -max-latency duration
         filter latency greater than this value (default 800ms)
   -min-download-speed float

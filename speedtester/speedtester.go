@@ -67,7 +67,7 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, error) {
+func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
 	st.blockedNodes = make([]string, 0)
 	st.blockedNodeCount = 0
@@ -160,9 +160,6 @@ func (st *SpeedTester) LoadProxies(stashCompatible bool) (map[string]*CProxy, er
 			}
 			if server, ok := p.Config["server"]; ok {
 				p.Config["server"] = convertMappedIPv6ToIPv4(server.(string))
-			}
-			if stashCompatible && !isStashCompatible(p) {
-				continue
 			}
 			if _, ok := allProxies[k]; !ok {
 				allProxies[k] = p

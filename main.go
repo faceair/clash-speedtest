@@ -18,6 +18,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Version information injected via ldflags during build
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 var (
 	configPathsConfig = flag.String("c", "", "config file path, also support http(s) url")
 	filterRegexConfig = flag.String("f", ".+", "filter proxies by name, use regexp")
@@ -28,12 +34,12 @@ var (
 	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
-	stashCompatible   = flag.Bool("stash-compatible", false, "enable stash compatible mode")
 	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
 	renameNodes       = flag.Bool("rename", false, "rename nodes with IP location and speed")
 	fastMode          = flag.Bool("fast", false, "fast mode, only test latency")
+	versionFlag       = flag.Bool("v", false, "show version information")
 )
 
 const (
@@ -46,6 +52,12 @@ const (
 func main() {
 	flag.Parse()
 	log.SetLevel(log.SILENT)
+
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("clash-speedtest version %s (commit %s)\n", version, commit)
+		os.Exit(0)
+	}
 
 	if *configPathsConfig == "" {
 		log.Fatalln("please specify the configuration file")
@@ -66,7 +78,7 @@ func main() {
 		FastMode:         *fastMode,
 	})
 
-	allProxies, err := speedTester.LoadProxies(*stashCompatible)
+	allProxies, err := speedTester.LoadProxies()
 	if err != nil {
 		log.Fatalln("load proxies failed: %v", err)
 	}
@@ -234,6 +246,8 @@ func printResults(results []*speedtester.Result) {
 
 func saveConfig(results []*speedtester.Result) error {
 	proxies := make([]map[string]any, 0)
+	nameCount := make(map[string]int) // Track name usage to avoid duplicates
+
 	for _, result := range results {
 		if *maxLatency > 0 && result.Latency > *maxLatency {
 			continue
@@ -252,7 +266,7 @@ func saveConfig(results []*speedtester.Result) error {
 				proxies = append(proxies, proxyConfig)
 				continue
 			}
-			proxyConfig["name"] = generateNodeName(location.CountryCode, result.DownloadSpeed)
+			proxyConfig["name"] = generateNodeName(location.CountryCode, result.DownloadSpeed, nameCount)
 		}
 		proxies = append(proxies, proxyConfig)
 	}
@@ -314,12 +328,20 @@ func getIPLocation(ip string) (*IPLocation, error) {
 	return &location, nil
 }
 
-func generateNodeName(countryCode string, downloadSpeed float64) string {
+func generateNodeName(countryCode string, downloadSpeed float64, nameCount map[string]int) string {
 	flag, exists := countryFlags[strings.ToUpper(countryCode)]
 	if !exists {
 		flag = "🏳️"
 	}
 
 	speedMBps := downloadSpeed / (1024 * 1024)
-	return fmt.Sprintf("%s %s | ⬇️ %.2f MB/s", flag, strings.ToUpper(countryCode), speedMBps)
+	baseName := fmt.Sprintf("%s %s | ⬇️ %.2f MB/s", flag, strings.ToUpper(countryCode), speedMBps)
+
+	// Append sequence number if name already exists
+	count := nameCount[baseName]
+	nameCount[baseName] = count + 1
+	if count > 0 {
+		return fmt.Sprintf("%s-%02d", baseName, count)
+	}
+	return baseName
 }
