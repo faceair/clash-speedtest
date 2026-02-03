@@ -34,6 +34,7 @@ type Config struct {
 	MinDownloadSpeed float64
 	MinUploadSpeed   float64
 	FastMode         bool
+	OutputPath       string
 }
 
 type SpeedTester struct {
@@ -121,7 +122,8 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
 			if err := pd.Initial(); err != nil {
-				return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
+				log.Errorln("initial proxy provider %s error: %w", pd.Name(), err)
+				continue
 			}
 
 			resp, err := http.Get(config["url"].(string))
@@ -154,7 +156,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			switch p.Type() {
 			case constant.Shadowsocks, constant.ShadowsocksR, constant.Snell, constant.Socks5, constant.Http,
 				constant.Vmess, constant.Vless, constant.Trojan, constant.Hysteria, constant.Hysteria2,
-				constant.WireGuard, constant.Tuic, constant.Ssh, constant.Mieru, constant.AnyTLS:
+				constant.WireGuard, constant.Tuic, constant.Ssh, constant.Mieru, constant.AnyTLS, constant.Sudoku:
 			default:
 				continue
 			}
@@ -201,102 +203,10 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	return filteredProxies, nil
 }
 
-func isStashCompatible(proxy *CProxy) bool {
-	switch proxy.Type() {
-	case constant.Shadowsocks:
-		cipher, ok := proxy.Config["cipher"]
-		if ok {
-			switch cipher {
-			case "aes-128-gcm", "aes-192-gcm", "aes-256-gcm",
-				"aes-128-cfb", "aes-192-cfb", "aes-256-cfb",
-				"aes-128-ctr", "aes-192-ctr", "aes-256-ctr",
-				"rc4-md5", "chacha20", "chacha20-ietf", "xchacha20",
-				"chacha20-ietf-poly1305", "xchacha20-ietf-poly1305",
-				"2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm":
-			default:
-				return false
-			}
-		}
-	case constant.ShadowsocksR:
-		if obfs, ok := proxy.Config["obfs"]; ok {
-			switch obfs {
-			case "plain", "http_simple", "http_post", "random_head",
-				"tls1.2_ticket_auth", "tls1.2_ticket_fastauth":
-			default:
-				return false
-			}
-		}
-		if protocol, ok := proxy.Config["protocol"]; ok {
-			switch protocol {
-			case "origin", "auth_sha1_v4", "auth_aes128_md5",
-				"auth_aes128_sha1", "auth_chain_a", "auth_chain_b":
-			default:
-				return false
-			}
-		}
-	case constant.Snell:
-		if obfsOpts, ok := proxy.Config["obfs-opts"]; ok {
-			if obfsOptsMap, ok := obfsOpts.(map[string]any); ok {
-				if mode, ok := obfsOptsMap["mode"]; ok {
-					switch mode {
-					case "http", "tls":
-					default:
-						return false
-					}
-				}
-			}
-		}
-	case constant.Socks5, constant.Http:
-	case constant.Vmess:
-		if cipher, ok := proxy.Config["cipher"]; ok {
-			switch cipher {
-			case "auto", "aes-128-gcm", "chacha20-poly1305", "none":
-			default:
-				return false
-			}
-		}
-		if network, ok := proxy.Config["network"]; ok {
-			switch network {
-			case "ws", "h2", "http", "grpc":
-			default:
-				return false
-			}
-		}
-	case constant.Vless:
-		if flow, ok := proxy.Config["flow"]; ok {
-			switch flow {
-			case "xtls-rprx-origin", "xtls-rprx-direct", "xtls-rprx-splice", "xtls-rprx-vision":
-			default:
-				return false
-			}
-		}
-	case constant.Trojan:
-		if network, ok := proxy.Config["network"]; ok {
-			switch network {
-			case "ws", "grpc":
-			default:
-				return false
-			}
-		}
-	case constant.Hysteria, constant.Hysteria2:
-	case constant.WireGuard:
-	case constant.Tuic:
-	case constant.Ssh:
-	default:
-		return false
-	}
-	return true
-}
-
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, tester func(result *Result)) {
 	for name, proxy := range proxies {
 		tester(st.testProxy(name, proxy))
 	}
-}
-
-type testJob struct {
-	name  string
-	proxy *CProxy
 }
 
 type Result struct {
@@ -309,12 +219,21 @@ type Result struct {
 	DownloadSize  float64        `json:"download_size"`
 	DownloadTime  time.Duration  `json:"download_time"`
 	DownloadSpeed float64        `json:"download_speed"`
+	DownloadError string         `json:"download_error"`
 	UploadSize    float64        `json:"upload_size"`
 	UploadTime    time.Duration  `json:"upload_time"`
 	UploadSpeed   float64        `json:"upload_speed"`
+	UploadError   string         `json:"upload_error"`
 }
 
 func (r *Result) FormatDownloadSpeed() string {
+	if r.DownloadError != "" {
+		return r.DownloadError
+	}
+	return formatSpeed(r.DownloadSpeed)
+}
+
+func (r *Result) FormatDownloadSpeedValue() string {
 	return formatSpeed(r.DownloadSpeed)
 }
 
@@ -337,7 +256,28 @@ func (r *Result) FormatPacketLoss() string {
 }
 
 func (r *Result) FormatUploadSpeed() string {
+	if r.UploadError != "" {
+		return r.UploadError
+	}
 	return formatSpeed(r.UploadSpeed)
+}
+
+func (r *Result) FormatUploadSpeedValue() string {
+	return formatSpeed(r.UploadSpeed)
+}
+
+func (r *Result) FormatDownloadError() string {
+	if r.DownloadError == "" {
+		return "N/A"
+	}
+	return r.DownloadError
+}
+
+func (r *Result) FormatUploadError() string {
+	if r.UploadError == "" {
+		return "N/A"
+	}
+	return r.UploadError
 }
 
 func formatSpeed(bytesPerSecond float64) string {
@@ -361,14 +301,13 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	// 1. 首先进行延迟测试
 	latencyResult := st.testLatency(proxy, st.config.MaxLatency)
 	result.Latency = latencyResult.avgLatency
-	if st.config.FastMode {
-		return result
-	} else {
-		result.Jitter = latencyResult.jitter
-		result.PacketLoss = latencyResult.packetLoss
-	}
+	result.Jitter = latencyResult.jitter
+	result.PacketLoss = latencyResult.packetLoss
 
-	if result.PacketLoss == 100 || result.Latency > st.config.MaxLatency {
+	if st.config.FastMode || result.PacketLoss == 100 {
+		return result
+	}
+	if st.config.OutputPath != "" && latencyResult.avgLatency > st.config.MaxLatency {
 		return result
 	}
 
@@ -376,9 +315,8 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 	var wg sync.WaitGroup
 
-	var totalDownloadBytes, totalUploadBytes int64
-	var totalDownloadTime, totalUploadTime time.Duration
-	var downloadCount, uploadCount int
+	downloadSummary := newTransferSummary()
+	uploadSummary := newTransferSummary()
 
 	downloadChunkSize := st.config.DownloadSize / st.config.Concurrent
 	if downloadChunkSize > 0 {
@@ -395,20 +333,14 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 		for range st.config.Concurrent {
 			if dr := <-downloadResults; dr != nil {
-				totalDownloadBytes += dr.bytes
-				totalDownloadTime += dr.duration
-				downloadCount++
+				downloadSummary.add(dr)
 			}
 		}
 		close(downloadResults)
 
-		if downloadCount > 0 {
-			result.DownloadSize = float64(totalDownloadBytes)
-			result.DownloadTime = totalDownloadTime / time.Duration(downloadCount)
-			result.DownloadSpeed = float64(totalDownloadBytes) / result.DownloadTime.Seconds()
-		}
+		result.DownloadSize, result.DownloadTime, result.DownloadSpeed, result.DownloadError = applyTransferSummary(downloadSummary)
 
-		if result.DownloadSpeed < st.config.MinDownloadSpeed {
+		if st.config.OutputPath != "" && result.DownloadSpeed < st.config.MinDownloadSpeed {
 			return result
 		}
 	}
@@ -428,22 +360,12 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 		for i := 0; i < st.config.Concurrent; i++ {
 			if ur := <-uploadResults; ur != nil {
-				totalUploadBytes += ur.bytes
-				totalUploadTime += ur.duration
-				uploadCount++
+				uploadSummary.add(ur)
 			}
 		}
 		close(uploadResults)
 
-		if uploadCount > 0 {
-			result.UploadSize = float64(totalUploadBytes)
-			result.UploadTime = totalUploadTime / time.Duration(uploadCount)
-			result.UploadSpeed = float64(totalUploadBytes) / result.UploadTime.Seconds()
-		}
-
-		if result.UploadSpeed < st.config.MinUploadSpeed {
-			return result
-		}
+		result.UploadSize, result.UploadTime, result.UploadSpeed, result.UploadError = applyTransferSummary(uploadSummary)
 	}
 
 	return result
@@ -460,7 +382,7 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy, minLatency time.Duratio
 	latencies := make([]time.Duration, 0, 6)
 	failedPings := 0
 
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		time.Sleep(100 * time.Millisecond)
 
 		start := time.Now()
@@ -481,25 +403,107 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy, minLatency time.Duratio
 }
 
 type downloadResult struct {
+	error    string
 	bytes    int64
 	duration time.Duration
+}
+
+type transferSummary struct {
+	totalBytes    int64
+	totalDuration time.Duration
+	successCount  int
+	errors        []string
+	errorSeen     map[string]struct{}
+}
+
+func applyTransferSummary(summary *transferSummary) (float64, time.Duration, float64, string) {
+	if summary == nil {
+		return 0, 0, 0, ""
+	}
+	var size float64
+	var duration time.Duration
+	var speed float64
+	var errorMessage string
+	if summary.successCount > 0 {
+		size = float64(summary.totalBytes)
+		duration = summary.averageDuration()
+		if duration > 0 {
+			speed = float64(summary.totalBytes) / duration.Seconds()
+		}
+	}
+	if len(summary.errors) > 0 {
+		errorMessage = strings.Join(summary.errors, "; ")
+		// If any transfer error is reported, treat the speed as zero.
+		speed = 0
+	}
+	return size, duration, speed, errorMessage
+}
+
+func newTransferSummary() *transferSummary {
+	return &transferSummary{
+		errorSeen: make(map[string]struct{}),
+	}
+}
+
+func (s *transferSummary) add(result *downloadResult) {
+	if result == nil {
+		return
+	}
+	if result.error != "" {
+		s.appendError(result.error)
+		return
+	}
+	s.totalBytes += result.bytes
+	s.totalDuration += result.duration
+	s.successCount++
+}
+
+func (s *transferSummary) appendError(message string) {
+	if message == "" {
+		return
+	}
+	if s.errorSeen == nil {
+		s.errorSeen = make(map[string]struct{})
+	}
+	if _, exists := s.errorSeen[message]; exists {
+		return
+	}
+	s.errorSeen[message] = struct{}{}
+	s.errors = append(s.errors, message)
+}
+
+func (s *transferSummary) averageDuration() time.Duration {
+	if s.successCount == 0 {
+		return 0
+	}
+	return s.totalDuration / time.Duration(s.successCount)
 }
 
 func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	start := time.Now()
+	downloadURL := fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, size)
 
-	resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, size))
+	resp, err := client.Get(downloadURL)
 	if err != nil {
-		return nil
+		return &downloadResult{
+			error: fmt.Sprintf("download request to %s failed: %v, spent %s", downloadURL, err, time.Since(start)),
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return &downloadResult{
+			error: fmt.Sprintf("download response from %s returned %s, spent %s", downloadURL, resp.Status, time.Since(start)),
+		}
 	}
 
-	downloadBytes, _ := io.Copy(io.Discard, resp.Body)
+	downloadBytes, err := io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		return &downloadResult{
+			error: fmt.Sprintf("download read from %s failed: %v, spent %s", downloadURL, err, time.Since(start)),
+		}
+	}
 
 	return &downloadResult{
 		bytes:    downloadBytes,
@@ -510,20 +514,25 @@ func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time
 func (st *SpeedTester) testUpload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	reader := NewZeroReader(size)
+	uploadURL := fmt.Sprintf("%s/__up", st.config.ServerURL)
 
 	start := time.Now()
 	resp, err := client.Post(
-		fmt.Sprintf("%s/__up", st.config.ServerURL),
+		uploadURL,
 		"application/octet-stream",
 		reader,
 	)
 	if err != nil {
-		return nil
+		return &downloadResult{
+			error: fmt.Sprintf("upload request to %s failed: %v, spent %s", uploadURL, err, time.Since(start)),
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return &downloadResult{
+			error: fmt.Sprintf("upload response from %s returned %s, spent %s", uploadURL, resp.Status, time.Since(start)),
+		}
 	}
 
 	return &downloadResult{
