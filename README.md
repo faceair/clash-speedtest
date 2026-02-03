@@ -57,6 +57,8 @@ Usage of clash-speedtest:
         output config file path (default "")
   -max-latency duration
         filter latency greater than this value (default 800ms)
+  -max-packet-loss float
+        filter packet loss greater than this value(unit: %) (default 100)
   -min-download-speed float
         filter speed less than this value(unit: MB/s) (default 5)
   -min-upload-speed float
