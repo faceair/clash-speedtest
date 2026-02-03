@@ -307,7 +307,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	if st.config.FastMode || result.PacketLoss == 100 {
 		return result
 	}
-	if st.config.OutputPath != "" && latencyResult.avgLatency > st.config.MaxLatency {
+	if st.config.OutputPath != "" && st.config.MaxLatency > 0 && latencyResult.avgLatency > st.config.MaxLatency {
 		return result
 	}
 
@@ -340,7 +340,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 
 		result.DownloadSize, result.DownloadTime, result.DownloadSpeed, result.DownloadError = applyTransferSummary(downloadSummary)
 
-		if st.config.OutputPath != "" && result.DownloadSpeed < st.config.MinDownloadSpeed {
+		if st.config.OutputPath != "" && st.config.MinDownloadSpeed > 0 && result.DownloadSpeed < st.config.MinDownloadSpeed {
 			return result
 		}
 	}
