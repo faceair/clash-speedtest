@@ -32,6 +32,7 @@ var (
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
 	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
+	maxPacketLoss     = flag.Float64("max-packet-loss", 100, "filter packet loss greater than this value(unit: %)")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s)")
 	renameNodes       = flag.Bool("rename", false, "rename nodes with IP location and speed")
@@ -62,6 +63,7 @@ func main() {
 		UploadSize:       *uploadSize,
 		Timeout:          *timeout,
 		Concurrent:       *concurrent,
+		MaxPacketLoss:    *maxPacketLoss,
 		MaxLatency:       *maxLatency,
 		MinDownloadSpeed: *minDownloadSpeed * 1024 * 1024,
 		MinUploadSpeed:   *minUploadSpeed * 1024 * 1024,
@@ -164,6 +166,9 @@ func saveConfig(results []*speedtester.Result) error {
 
 	for _, result := range results {
 		if *maxLatency > 0 && result.Latency > *maxLatency {
+			continue
+		}
+		if *maxPacketLoss >= 0 && result.PacketLoss > *maxPacketLoss {
 			continue
 		}
 		if *downloadSize > 0 && *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed*1024*1024 {

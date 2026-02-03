@@ -31,6 +31,7 @@ type Config struct {
 	Timeout          time.Duration
 	Concurrent       int
 	MaxLatency       time.Duration
+	MaxPacketLoss    float64
 	MinDownloadSpeed float64
 	MinUploadSpeed   float64
 	FastMode         bool
@@ -305,6 +306,9 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	result.PacketLoss = latencyResult.packetLoss
 
 	if st.config.FastMode || result.PacketLoss == 100 {
+		return result
+	}
+	if st.config.OutputPath != "" && st.config.MaxPacketLoss < 100 && latencyResult.packetLoss > st.config.MaxPacketLoss {
 		return result
 	}
 	if st.config.OutputPath != "" && st.config.MaxLatency > 0 && latencyResult.avgLatency > st.config.MaxLatency {

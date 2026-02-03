@@ -78,7 +78,7 @@ func NewTUIModel(fastMode bool, totalProxies int, resultChannel chan *speedteste
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows([]table.Row{}),
-		table.WithFocused(false),
+		table.WithFocused(true),
 		table.WithHeight(10),
 	)
 
@@ -153,7 +153,21 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+		m.table, cmd = m.table.Update(msg)
+		m.syncSelectionFromCursor()
+		return m, cmd
+
 	case tea.MouseMsg:
+		if msg.Button == tea.MouseButtonWheelUp {
+			m.table.MoveUp(1)
+			m.syncSelectionFromCursor()
+			return m, nil
+		}
+		if msg.Button == tea.MouseButtonWheelDown {
+			m.table.MoveDown(1)
+			m.syncSelectionFromCursor()
+			return m, nil
+		}
 		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionRelease {
 			if m.isHeaderClick(msg.Y) {
 				if columnIndex := m.columnAtX(msg.X); columnIndex >= 0 {

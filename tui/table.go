@@ -117,10 +117,15 @@ func (m tuiModel) rowAtY(y int) (int, bool) {
 		return 0, false
 	}
 	rowIndex := y - startY
-	if rowIndex < 0 || rowIndex >= len(m.results) {
+	if rowIndex < 0 || rowIndex >= m.table.Height() {
 		return 0, false
 	}
-	return rowIndex, true
+	start := tableStartIndex(m.table.Cursor(), m.table.Height())
+	absoluteIndex := start + rowIndex
+	if absoluteIndex < 0 || absoluteIndex >= len(m.results) {
+		return 0, false
+	}
+	return absoluteIndex, true
 }
 
 func (m tuiModel) tableHeaderY() int {
@@ -140,7 +145,6 @@ func (m tuiModel) isHeaderClick(y int) bool {
 func (m *tuiModel) setSelection(index int) {
 	if index < 0 || index >= len(m.results) {
 		m.selectedIndex = -1
-		m.table.Blur()
 		return
 	}
 	if m.detailResult == nil || m.detailResult != m.results[index] {
@@ -153,7 +157,6 @@ func (m *tuiModel) setSelection(index int) {
 
 func (m *tuiModel) syncSelection() {
 	if m.selectedIndex < 0 {
-		m.table.Blur()
 		return
 	}
 	if m.detailResult != nil {
@@ -171,6 +174,35 @@ func (m *tuiModel) syncSelection() {
 	}
 	m.table.SetCursor(m.selectedIndex)
 	m.table.Focus()
+}
+
+func (m *tuiModel) syncSelectionFromCursor() {
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.results) {
+		return
+	}
+	m.selectedIndex = cursor
+	if m.detailVisible {
+		m.detailResult = m.results[cursor]
+	}
+	m.table.Focus()
+}
+
+func tableStartIndex(cursor int, height int) int {
+	if cursor < 0 {
+		return 0
+	}
+	return clampInt(cursor-height, 0, cursor)
+}
+
+func clampInt(value int, low int, high int) int {
+	if value < low {
+		return low
+	}
+	if value > high {
+		return high
+	}
+	return value
 }
 
 // colorizeRow applies color thresholds to a row
