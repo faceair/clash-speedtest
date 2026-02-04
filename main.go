@@ -35,7 +35,7 @@ var (
 	outputPath        = flag.String("output", "", "output config file path")
 	gistToken         = flag.String("gist-token", "", "github gist token for updating output")
 	gistAddress       = flag.String("gist-address", "", "github gist address or id for updating output")
-	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
+	maxLatency        = flag.Duration("max-latency", time.Second, "filter latency greater than this value")
 	maxPacketLoss     = flag.Float64("max-packet-loss", 100, "filter packet loss greater than this value(unit: %)")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s, full mode only)")
