@@ -92,7 +92,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 # 5. 使用 -rename 选项按照 IP 地区和下载速度重命名节点
 > clash-speedtest -c config.yaml -output result.yaml -rename
-# 重命名后的节点名称格式：🇺🇸 US | ⬇️ 15.67 MB/s
+# 重命名后的节点名称格式：🇺🇸 US 001 | ⬇️ 15.67MB/s
 # 包含国旗 emoji、国家代码和下载速度
 
 # 6. 快速测试模式

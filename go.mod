@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.13.0
 	github.com/metacubex/mihomo v1.19.19
 	golang.org/x/term v0.39.0
-	gopkg.in/yaml.v3 v3.0.1
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -113,4 +113,5 @@ require (
 	golang.org/x/tools v0.41.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

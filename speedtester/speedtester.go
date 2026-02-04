@@ -18,7 +18,7 @@ import (
 	"github.com/metacubex/mihomo/adapter/provider"
 	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/log"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -74,7 +74,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	st.blockedNodes = make([]string, 0)
 	st.blockedNodeCount = 0
 
-	for _, configPath := range strings.Split(st.config.ConfigPaths, ",") {
+	for configPath := range strings.SplitSeq(st.config.ConfigPaths, ",") {
 		var body []byte
 		var err error
 		if strings.HasPrefix(configPath, "http") {
@@ -97,7 +97,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			Proxies: []map[string]any{},
 		}
 		if err := yaml.Unmarshal(body, rawCfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to parse config: %w, body: %s", err, body)
 		}
 		proxies := make(map[string]*CProxy)
 		proxiesConfig := rawCfg.Proxies
@@ -140,7 +140,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				Proxies: []map[string]any{},
 			}
 			if err := yaml.Unmarshal(body, pdRawCfg); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("unable to parse config: %w, body: %s", err, body)
 			}
 			pdProxies := make(map[string]map[string]any)
 			for _, pdProxy := range pdRawCfg.Proxies {

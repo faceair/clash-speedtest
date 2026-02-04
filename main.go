@@ -12,7 +12,7 @@ import (
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/faceair/clash-speedtest/tui"
 	"github.com/metacubex/mihomo/log"
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 // Version information injected via ldflags during build
@@ -185,7 +185,7 @@ func saveConfig(results []*speedtester.Result) error {
 				proxies = append(proxies, proxyConfig)
 				continue
 			}
-			proxyConfig["name"] = ip.GenerateNodeName(location.CountryCode, result.DownloadSpeed, nameCount)
+			proxyConfig["name"] = ip.GenerateNodeName(location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
 		}
 		proxies = append(proxies, proxyConfig)
 	}

@@ -22,20 +22,23 @@ var countryFlags = map[string]string{
 	"PG": "🇵🇬", "NC": "🇳🇨", "PF": "🇵🇫", "WF": "🇼🇫", "CK": "🇨🇰", "NU": "🇳🇺", "TK": "🇹🇰", "SC": "🇸🇨",
 }
 
-func GenerateNodeName(countryCode string, downloadSpeed float64, nameCount map[string]int) string {
+func GenerateNodeName(countryCode string, downloadSpeed float64, uploadSpeed float64, nameCount map[string]int) string {
 	flag, exists := countryFlags[strings.ToUpper(countryCode)]
 	if !exists {
 		flag = "🏳️"
 	}
 
-	speedMBps := downloadSpeed / (1024 * 1024)
-	baseName := fmt.Sprintf("%s %s | ⬇️ %.2f MB/s", flag, strings.ToUpper(countryCode), speedMBps)
-
-	// Append sequence number if name already exists
-	count := nameCount[baseName]
-	nameCount[baseName] = count + 1
-	if count > 0 {
-		return fmt.Sprintf("%s-%02d", baseName, count)
+	upperCountryCode := strings.ToUpper(countryCode)
+	speed := downloadSpeed
+	direction := "⬇️"
+	if downloadSpeed <= 0 {
+		speed = uploadSpeed
+		direction = "⬆️"
 	}
-	return baseName
+
+	speedMBps := speed / (1024 * 1024)
+	count := nameCount[upperCountryCode] + 1
+	nameCount[upperCountryCode] = count
+
+	return fmt.Sprintf("%s %s %03d | %s %.2fMB/s", flag, upperCountryCode, count, direction, speedMBps)
 }
