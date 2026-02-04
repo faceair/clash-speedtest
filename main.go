@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,7 @@ var (
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
 	gistToken         = flag.String("gist-token", "", "github gist token for updating output")
-	gistAddress       = flag.String("gist-address", "", "github gist address or id for updating output")
+	gistAddress       = flag.String("gist-address", "", "github gist address or id for updating output (filename uses output basename)")
 	maxLatency        = flag.Duration("max-latency", time.Second, "filter latency greater than this value")
 	maxPacketLoss     = flag.Float64("max-packet-loss", 100, "filter packet loss greater than this value(unit: %)")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
@@ -222,7 +223,8 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 
 	if *gistToken != "" && *gistAddress != "" {
 		uploader := gist.NewUploader(nil)
-		if err := uploader.UpdateFile(*gistToken, *gistAddress, "fastsub.yaml", yamlData); err != nil {
+		outputFilename := filepath.Base(filepath.Clean(*outputPath))
+		if err := uploader.UpdateFile(*gistToken, *gistAddress, outputFilename, yamlData); err != nil {
 			log.Warnln("update gist failed: %v", err)
 		}
 	}
