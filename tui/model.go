@@ -215,8 +215,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if rowIndex, ok := m.rowAtY(msg.Y); ok {
-				m.setSelection(rowIndex)
 				m.toggleDetail(m.results[rowIndex])
+				m.setSelection(rowIndex)
 				return m, nil
 			}
 		}

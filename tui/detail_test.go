@@ -63,6 +63,60 @@ func TestTUIModelDetailPanelToggle(t *testing.T) {
 	}
 }
 
+func TestTUIModelDetailPanelSwitchOnClick(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 10)
+	model := NewTUIModel(speedtester.SpeedModeFull, 2, resultChannel)
+	model.windowWidth = 120
+	model.windowHeight = 40
+
+	first := &speedtester.Result{
+		ProxyName:  "First Proxy",
+		ProxyType:  "SS",
+		Latency:    120 * time.Millisecond,
+		PacketLoss: 2.0,
+	}
+	second := &speedtester.Result{
+		ProxyName:  "Second Proxy",
+		ProxyType:  "Trojan",
+		Latency:    180 * time.Millisecond,
+		PacketLoss: 4.0,
+	}
+	model.results = []*speedtester.Result{first, second}
+	model.updateTableRows()
+	model.updateTableLayout()
+
+	rowY := model.tableHeaderY() + tableHeaderLines
+	clickFirst := tea.MouseMsg{
+		X:      1,
+		Y:      rowY,
+		Action: tea.MouseActionRelease,
+		Button: tea.MouseButtonLeft,
+	}
+	opened, _ := model.Update(clickFirst)
+	openedModel := opened.(tuiModel)
+	if !openedModel.detailVisible {
+		t.Fatalf("expected detail panel to be visible after first click")
+	}
+	if openedModel.detailResult != first {
+		t.Fatalf("expected detail result to match first row")
+	}
+
+	clickSecond := tea.MouseMsg{
+		X:      1,
+		Y:      rowY + 1,
+		Action: tea.MouseActionRelease,
+		Button: tea.MouseButtonLeft,
+	}
+	updated, _ := openedModel.Update(clickSecond)
+	updatedModel := updated.(tuiModel)
+	if !updatedModel.detailVisible {
+		t.Fatalf("expected detail panel to remain visible after switching rows")
+	}
+	if updatedModel.detailResult != second {
+		t.Fatalf("expected detail result to switch to second row")
+	}
+}
+
 func TestTUIModelDetailPanelEscRestoresLayout(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
 	model := NewTUIModel(speedtester.SpeedModeDownload, 1, resultChannel)
