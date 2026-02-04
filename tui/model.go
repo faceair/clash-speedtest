@@ -28,7 +28,7 @@ type timerTickMsg struct{}
 
 // tuiModel represents the Bubble Tea model for the TUI
 type tuiModel struct {
-	fastMode      bool
+	mode          speedtester.SpeedMode
 	totalProxies  int
 	currentProxy  int
 	results       []*speedtester.Result
@@ -63,7 +63,7 @@ var selectedRowStyle = lipgloss.NewStyle().
 	Bold(true)
 
 // NewTUIModel creates a new TUI model
-func NewTUIModel(fastMode bool, totalProxies int, resultChannel chan *speedtester.Result) tuiModel {
+func NewTUIModel(mode speedtester.SpeedMode, totalProxies int, resultChannel chan *speedtester.Result) tuiModel {
 	// Initialize progress bar
 	p := progress.New(
 		progress.WithDefaultGradient(),
@@ -71,9 +71,9 @@ func NewTUIModel(fastMode bool, totalProxies int, resultChannel chan *speedteste
 	)
 
 	// Initialize table with headers
-	headers := output.GetHeaders(fastMode)
-	sortColumn, sortAscending := defaultSortState(fastMode)
-	columns := buildColumns(addSortIndicators(headers, sortColumn, sortAscending), 0, fastMode)
+	headers := output.GetHeaders(mode)
+	sortColumn, sortAscending := defaultSortState(mode)
+	columns := buildColumns(addSortIndicators(headers, sortColumn, sortAscending), 0, mode)
 
 	t := table.New(
 		table.WithColumns(columns),
@@ -93,7 +93,7 @@ func NewTUIModel(fastMode bool, totalProxies int, resultChannel chan *speedteste
 	t.SetStyles(s)
 
 	return tuiModel{
-		fastMode:      fastMode,
+		mode:          mode,
 		totalProxies:  totalProxies,
 		currentProxy:  0,
 		results:       make([]*speedtester.Result, 0),
@@ -247,7 +247,7 @@ func (m tuiModel) View() string {
 
 	// Layout: progress bar at top, table below
 	tableView := m.table.View()
-	detailView := m.detailPanelView(tableView)
+	detailView := m.detailPanelView()
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,

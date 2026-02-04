@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -34,17 +35,34 @@ type Config struct {
 	MaxPacketLoss    float64
 	MinDownloadSpeed float64
 	MinUploadSpeed   float64
-	FastMode         bool
+	Mode             SpeedMode
 	OutputPath       string
+}
+
+type serverMode int
+
+const (
+	serverModeDownloadServer serverMode = iota
+	serverModeDirectDownload
+)
+
+type serverTarget struct {
+	mode        serverMode
+	baseURL     string
+	downloadURL string
 }
 
 type SpeedTester struct {
 	config           *Config
 	blockedNodes     []string
 	blockedNodeCount int
+	serverMode       serverMode
+	serverBaseURL    string
+	downloadURL      string
+	mode             SpeedMode
 }
 
-func New(config *Config) *SpeedTester {
+func New(config *Config) (*SpeedTester, error) {
 	if config.Concurrent <= 0 {
 		config.Concurrent = 1
 	}
@@ -54,9 +72,63 @@ func New(config *Config) *SpeedTester {
 	if config.UploadSize < 0 {
 		config.UploadSize = 10 * 1024 * 1024
 	}
-	return &SpeedTester{
-		config: config,
+	mode := config.Mode
+	if mode == "" {
+		mode = SpeedModeDownload
 	}
+	target, err := resolveServerTarget(config.ServerURL)
+	if err != nil {
+		return nil, err
+	}
+	if mode == SpeedModeFull && config.UploadSize <= 0 {
+		return nil, fmt.Errorf("upload size must be positive when speed mode is %s", mode)
+	}
+	if target.mode == serverModeDirectDownload && mode == SpeedModeFull {
+		mode = SpeedModeDownload
+	}
+	config.Mode = mode
+	return &SpeedTester{
+		config:        config,
+		serverMode:    target.mode,
+		serverBaseURL: target.baseURL,
+		downloadURL:   target.downloadURL,
+		mode:          mode,
+	}, nil
+}
+
+func (st *SpeedTester) Mode() SpeedMode {
+	return st.mode
+}
+
+func resolveServerTarget(rawURL string) (*serverTarget, error) {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return nil, fmt.Errorf("server url is empty")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("parse server url %q failed: %w", rawURL, err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("server url %q must include scheme and host", rawURL)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("server url %q must use http or https scheme, got %q", rawURL, parsed.Scheme)
+	}
+	path := strings.TrimSpace(parsed.Path)
+	hasPath := strings.Trim(path, "/") != ""
+	hasQuery := parsed.RawQuery != ""
+	hasFragment := parsed.Fragment != ""
+	if !hasPath && !hasQuery && !hasFragment {
+		return &serverTarget{
+			mode:    serverModeDownloadServer,
+			baseURL: strings.TrimRight(trimmed, "/"),
+		}, nil
+	}
+	return &serverTarget{
+		mode:        serverModeDirectDownload,
+		downloadURL: trimmed,
+	}, nil
 }
 
 type CProxy struct {
@@ -123,7 +195,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
 			if err := pd.Initial(); err != nil {
-				log.Errorln("initial proxy provider %s error: %w", pd.Name(), err)
+				log.Errorln("initial proxy provider %s error: %v", pd.Name(), err)
 				continue
 			}
 
@@ -282,6 +354,9 @@ func (r *Result) FormatUploadError() string {
 }
 
 func formatSpeed(bytesPerSecond float64) string {
+	if bytesPerSecond == 0 {
+		return "N/A"
+	}
 	units := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
 	unit := 0
 	speed := bytesPerSecond
@@ -305,7 +380,7 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 	result.Jitter = latencyResult.jitter
 	result.PacketLoss = latencyResult.packetLoss
 
-	if st.config.FastMode || result.PacketLoss == 100 {
+	if st.mode.IsFast() || result.PacketLoss == 100 {
 		return result
 	}
 	if st.config.OutputPath != "" && st.config.MaxPacketLoss < 100 && latencyResult.packetLoss > st.config.MaxPacketLoss {
@@ -315,12 +390,15 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		return result
 	}
 
-	// 2. 并发进行下载和上传测试
+	// 2. 并发进行下载测试，按需进行上传测试
 
 	var wg sync.WaitGroup
 
 	downloadSummary := newTransferSummary()
-	uploadSummary := newTransferSummary()
+	var uploadSummary *transferSummary
+	if st.mode.UploadEnabled() {
+		uploadSummary = newTransferSummary()
+	}
 
 	downloadChunkSize := st.config.DownloadSize / st.config.Concurrent
 	if downloadChunkSize > 0 {
@@ -349,27 +427,29 @@ func (st *SpeedTester) testProxy(name string, proxy *CProxy) *Result {
 		}
 	}
 
-	uploadChunkSize := st.config.UploadSize / st.config.Concurrent
-	if uploadChunkSize > 0 {
-		uploadResults := make(chan *downloadResult, st.config.Concurrent)
+	if st.mode.UploadEnabled() {
+		uploadChunkSize := st.config.UploadSize / st.config.Concurrent
+		if uploadChunkSize > 0 {
+			uploadResults := make(chan *downloadResult, st.config.Concurrent)
 
-		for i := 0; i < st.config.Concurrent; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				uploadResults <- st.testUpload(proxy, uploadChunkSize, st.config.Timeout)
-			}()
-		}
-		wg.Wait()
-
-		for i := 0; i < st.config.Concurrent; i++ {
-			if ur := <-uploadResults; ur != nil {
-				uploadSummary.add(ur)
+			for i := 0; i < st.config.Concurrent; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					uploadResults <- st.testUpload(proxy, uploadChunkSize, st.config.Timeout)
+				}()
 			}
-		}
-		close(uploadResults)
+			wg.Wait()
 
-		result.UploadSize, result.UploadTime, result.UploadSpeed, result.UploadError = applyTransferSummary(uploadSummary)
+			for i := 0; i < st.config.Concurrent; i++ {
+				if ur := <-uploadResults; ur != nil {
+					uploadSummary.add(ur)
+				}
+			}
+			close(uploadResults)
+
+			result.UploadSize, result.UploadTime, result.UploadSpeed, result.UploadError = applyTransferSummary(uploadSummary)
+		}
 	}
 
 	return result
@@ -390,17 +470,18 @@ func (st *SpeedTester) testLatency(proxy constant.Proxy, minLatency time.Duratio
 		time.Sleep(100 * time.Millisecond)
 
 		start := time.Now()
-		resp, err := client.Get(fmt.Sprintf("%s/__down?bytes=0", st.config.ServerURL))
+		req, err := http.NewRequest(http.MethodHead, st.downloadURL, nil)
+		if err != nil {
+			failedPings++
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			failedPings++
 			continue
 		}
 		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			latencies = append(latencies, time.Since(start))
-		} else {
-			failedPings++
-		}
+		latencies = append(latencies, time.Since(start))
 	}
 
 	return calculateLatencyStats(latencies, failedPings)
@@ -486,9 +567,23 @@ func (s *transferSummary) averageDuration() time.Duration {
 func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	start := time.Now()
-	downloadURL := fmt.Sprintf("%s/__down?bytes=%d", st.config.ServerURL, size)
+	var downloadURL string
+	if st.serverMode == serverModeDirectDownload {
+		downloadURL = st.downloadURL
+	} else {
+		downloadURL = fmt.Sprintf("%s/__down?bytes=%d", st.serverBaseURL, size)
+	}
 
-	resp, err := client.Get(downloadURL)
+	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return &downloadResult{
+			error: fmt.Sprintf("create download request for %s failed: %v", downloadURL, err),
+		}
+	}
+	if st.serverMode == serverModeDirectDownload && size > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=0-%d", size-1))
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return &downloadResult{
 			error: fmt.Sprintf("download request to %s failed: %v, spent %s", downloadURL, err, time.Since(start)),
@@ -496,19 +591,13 @@ func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return &downloadResult{
 			error: fmt.Sprintf("download response from %s returned %s, spent %s", downloadURL, resp.Status, time.Since(start)),
 		}
 	}
 
-	downloadBytes, err := io.Copy(io.Discard, resp.Body)
-	if err != nil {
-		return &downloadResult{
-			error: fmt.Sprintf("download read from %s failed: %v, spent %s", downloadURL, err, time.Since(start)),
-		}
-	}
-
+	downloadBytes, _ := io.Copy(io.Discard, resp.Body)
 	return &downloadResult{
 		bytes:    downloadBytes,
 		duration: time.Since(start),
@@ -518,7 +607,7 @@ func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time
 func (st *SpeedTester) testUpload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
 	reader := NewZeroReader(size)
-	uploadURL := fmt.Sprintf("%s/__up", st.config.ServerURL)
+	uploadURL := fmt.Sprintf("%s/__up", st.serverBaseURL)
 
 	start := time.Now()
 	resp, err := client.Post(

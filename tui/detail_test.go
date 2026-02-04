@@ -11,7 +11,7 @@ import (
 
 func TestTUIModelDetailPanelToggle(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(false, 1, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFull, 1, resultChannel)
 	model.windowWidth = 120
 	model.windowHeight = 40
 
@@ -45,7 +45,7 @@ func TestTUIModelDetailPanelToggle(t *testing.T) {
 		t.Fatalf("expected detail result to match clicked row")
 	}
 
-	detail := updatedModel.detailPanelView(updatedModel.table.View())
+	detail := updatedModel.detailPanelView()
 	if !strings.Contains(detail, result.DownloadError) {
 		t.Fatalf("expected detail view to include download error, got %q", detail)
 	}
@@ -65,7 +65,7 @@ func TestTUIModelDetailPanelToggle(t *testing.T) {
 
 func TestTUIModelDetailPanelEscRestoresLayout(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(false, 1, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 1, resultChannel)
 	model.windowWidth = 120
 	model.windowHeight = 40
 
@@ -104,5 +104,24 @@ func TestTUIModelDetailPanelEscRestoresLayout(t *testing.T) {
 	}
 	if closedModel.table.Height() != closedHeight {
 		t.Fatalf("expected table height to restore after ESC close: want=%d got=%d", closedHeight, closedModel.table.Height())
+	}
+}
+
+func TestBuildDetailContentDownloadOnly(t *testing.T) {
+	result := &speedtester.Result{
+		ProxyName:     "Error Proxy",
+		ProxyType:     "Trojan",
+		Latency:       200 * time.Millisecond,
+		Jitter:        20 * time.Millisecond,
+		PacketLoss:    5.0,
+		DownloadError: "download failed: timeout",
+		UploadError:   "upload failed: 500",
+	}
+	content := buildDetailContent(result, 80, speedtester.SpeedModeDownload)
+	if strings.Contains(content, "Upload") {
+		t.Fatalf("expected download-only detail to omit upload section, got %q", content)
+	}
+	if strings.Contains(content, result.UploadError) {
+		t.Fatalf("expected download-only detail to omit upload error, got %q", content)
 	}
 }

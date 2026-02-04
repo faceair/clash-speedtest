@@ -12,17 +12,22 @@ import (
 func TestNewTSVWriter(t *testing.T) {
 	tests := []struct {
 		name           string
-		fastMode       bool
+		mode           speedtester.SpeedMode
 		expectedHeader string
 	}{
 		{
 			name:           "fast mode header",
-			fastMode:       true,
+			mode:           speedtester.SpeedModeFast,
 			expectedHeader: "序号\t节点名称\t类型\t延迟\n",
 		},
 		{
-			name:           "normal mode header",
-			fastMode:       false,
+			name:           "download-only mode header",
+			mode:           speedtester.SpeedModeDownload,
+			expectedHeader: "序号\t节点名称\t类型\t延迟\t抖动\t丢包率\t下载速度\n",
+		},
+		{
+			name:           "upload-enabled mode header",
+			mode:           speedtester.SpeedModeFull,
 			expectedHeader: "序号\t节点名称\t类型\t延迟\t抖动\t丢包率\t下载速度\t上传速度\n",
 		},
 	}
@@ -30,7 +35,7 @@ func TestNewTSVWriter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			writer, err := NewTSVWriter(&output, tt.fastMode)
+			writer, err := NewTSVWriter(&output, tt.mode)
 
 			if err != nil {
 				t.Fatalf("NewTSVWriter failed: %v", err)
@@ -50,14 +55,14 @@ func TestNewTSVWriter(t *testing.T) {
 func TestTSVWriter_WriteRow(t *testing.T) {
 	tests := []struct {
 		name        string
-		fastMode    bool
+		mode        speedtester.SpeedMode
 		result      *speedtester.Result
 		index       int
 		expectedRow string
 	}{
 		{
-			name:     "fast mode row",
-			fastMode: true,
+			name: "fast mode row",
+			mode: speedtester.SpeedModeFast,
 			result: &speedtester.Result{
 				ProxyName: "Test Proxy",
 				ProxyType: "Trojan",
@@ -67,8 +72,8 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 			expectedRow: "1.\tTest Proxy\tTrojan\t500ms\n",
 		},
 		{
-			name:     "normal mode row",
-			fastMode: false,
+			name: "download-only mode row",
+			mode: speedtester.SpeedModeDownload,
 			result: &speedtester.Result{
 				ProxyName:     "Test Proxy",
 				ProxyType:     "Trojan",
@@ -79,11 +84,11 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 				UploadSpeed:   5 * 1024 * 1024,
 			},
 			index:       1,
-			expectedRow: "2.\tTest Proxy\tTrojan\t500ms\t50ms\t5.0%\t10.00MB/s\t5.00MB/s\n",
+			expectedRow: "2.\tTest Proxy\tTrojan\t500ms\t50ms\t5.0%\t10.00MB/s\n",
 		},
 		{
-			name:     "row with N/A values",
-			fastMode: false,
+			name: "row with N/A values",
+			mode: speedtester.SpeedModeDownload,
 			result: &speedtester.Result{
 				ProxyName:     "Failed Proxy",
 				ProxyType:     "Shadowsocks",
@@ -94,11 +99,11 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 				UploadSpeed:   0,
 			},
 			index:       2,
-			expectedRow: "3.\tFailed Proxy\tShadowsocks\tN/A\tN/A\t100.0%\t0.00B/s\t0.00B/s\n",
+			expectedRow: "3.\tFailed Proxy\tShadowsocks\tN/A\tN/A\t100.0%\t0.00B/s\n",
 		},
 		{
-			name:     "normal mode row with errors",
-			fastMode: false,
+			name: "upload-enabled row with errors",
+			mode: speedtester.SpeedModeFull,
 			result: &speedtester.Result{
 				ProxyName:     "Error Proxy",
 				ProxyType:     "Vmess",
@@ -116,7 +121,7 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			writer, err := NewTSVWriter(&output, tt.fastMode)
+			writer, err := NewTSVWriter(&output, tt.mode)
 			if err != nil {
 				t.Fatalf("NewTSVWriter failed: %v", err)
 			}
@@ -140,13 +145,13 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 func TestTSVWriter_WriteRows(t *testing.T) {
 	tests := []struct {
 		name         string
-		fastMode     bool
+		mode         speedtester.SpeedMode
 		results      []*speedtester.Result
 		expectedRows string
 	}{
 		{
-			name:     "fast mode multiple rows",
-			fastMode: true,
+			name: "fast mode multiple rows",
+			mode: speedtester.SpeedModeFast,
 			results: []*speedtester.Result{
 				{
 					ProxyName: "Proxy 1",
@@ -162,8 +167,8 @@ func TestTSVWriter_WriteRows(t *testing.T) {
 			expectedRows: "1.\tProxy 1\tTrojan\t100ms\n2.\tProxy 2\tShadowsocks\t200ms\n",
 		},
 		{
-			name:     "normal mode multiple rows",
-			fastMode: false,
+			name: "upload-enabled mode multiple rows",
+			mode: speedtester.SpeedModeFull,
 			results: []*speedtester.Result{
 				{
 					ProxyName:     "Proxy 1",
@@ -191,7 +196,7 @@ func TestTSVWriter_WriteRows(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
-			writer, err := NewTSVWriter(&output, tt.fastMode)
+			writer, err := NewTSVWriter(&output, tt.mode)
 			if err != nil {
 				t.Fatalf("NewTSVWriter failed: %v", err)
 			}
@@ -215,7 +220,7 @@ func TestTSVWriter_WriteRows(t *testing.T) {
 func TestTSVWriter_NoANSIColors(t *testing.T) {
 	// Ensure TSV output does not contain ANSI color codes
 	var output strings.Builder
-	writer, err := NewTSVWriter(&output, false)
+	writer, err := NewTSVWriter(&output, speedtester.SpeedModeFull)
 	if err != nil {
 		t.Fatalf("NewTSVWriter failed: %v", err)
 	}
@@ -245,7 +250,7 @@ func TestTSVWriter_NoANSIColors(t *testing.T) {
 
 func TestTSVWriter_HeaderWrittenOnce(t *testing.T) {
 	var output strings.Builder
-	writer, err := NewTSVWriter(&output, true)
+	writer, err := NewTSVWriter(&output, speedtester.SpeedModeFast)
 	if err != nil {
 		t.Fatalf("NewTSVWriter failed: %v", err)
 	}
@@ -264,7 +269,7 @@ func TestTSVWriter_HeaderWrittenOnce(t *testing.T) {
 
 func TestTSVWriter_ErrorContext(t *testing.T) {
 	var output strings.Builder
-	writer, err := NewTSVWriter(&output, true)
+	writer, err := NewTSVWriter(&output, speedtester.SpeedModeFast)
 	if err != nil {
 		t.Fatalf("NewTSVWriter failed: %v", err)
 	}
@@ -285,8 +290,8 @@ func TestTSVWriter_ErrorContext(t *testing.T) {
 	}
 
 	failWriter := &TSVWriter{
-		output:   &errorWriter{},
-		fastMode: true,
+		output: &errorWriter{},
+		mode:   speedtester.SpeedModeFast,
 	}
 	err = failWriter.WriteRow(result, 0)
 	if err == nil {

@@ -7,11 +7,12 @@ import (
 	"github.com/faceair/clash-speedtest/speedtester"
 )
 
-// GetHeaders returns table headers based on mode
-// fast mode: ID, Name, Type, Latency
-// normal mode: ID, Name, Type, Latency, Jitter, Packet Loss, Download Speed, Upload Speed
-func GetHeaders(fastMode bool) []string {
-	if fastMode {
+// GetHeaders returns table headers based on speed mode.
+// fast: ID, Name, Type, Latency
+// download: ID, Name, Type, Latency, Jitter, Packet Loss, Download Speed
+// full: ID, Name, Type, Latency, Jitter, Packet Loss, Download Speed, Upload Speed
+func GetHeaders(mode speedtester.SpeedMode) []string {
+	if mode.IsFast() {
 		return []string{
 			"序号",
 			"节点名称",
@@ -19,7 +20,7 @@ func GetHeaders(fastMode bool) []string {
 			"延迟",
 		}
 	}
-	return []string{
+	headers := []string{
 		"序号",
 		"节点名称",
 		"类型",
@@ -27,16 +28,19 @@ func GetHeaders(fastMode bool) []string {
 		"抖动",
 		"丢包率",
 		"下载速度",
-		"上传速度",
 	}
+	if mode.UploadEnabled() {
+		headers = append(headers, "上传速度")
+	}
+	return headers
 }
 
-// FormatRow formats a single result row without ANSI colors
-// Returns plain text strings using speedtester.Result's Format* methods
-func FormatRow(result *speedtester.Result, fastMode bool, index int) []string {
+// FormatRow formats a single result row without ANSI colors.
+// Returns plain text strings using speedtester.Result's Format* methods.
+func FormatRow(result *speedtester.Result, mode speedtester.SpeedMode, index int) []string {
 	idStr := fmt.Sprintf("%d.", index+1)
 
-	if fastMode {
+	if mode.IsFast() {
 		return []string{
 			idStr,
 			result.ProxyName,
@@ -44,7 +48,7 @@ func FormatRow(result *speedtester.Result, fastMode bool, index int) []string {
 			result.FormatLatency(),
 		}
 	}
-	return []string{
+	row := []string{
 		idStr,
 		result.ProxyName,
 		result.ProxyType,
@@ -52,15 +56,18 @@ func FormatRow(result *speedtester.Result, fastMode bool, index int) []string {
 		result.FormatJitter(),
 		result.FormatPacketLoss(),
 		result.FormatDownloadSpeed(),
-		result.FormatUploadSpeed(),
 	}
+	if mode.UploadEnabled() {
+		row = append(row, result.FormatUploadSpeed())
+	}
+	return row
 }
 
-// SortResults sorts results based on mode
-// fast mode: latency ascending (lower is better)
-// normal mode: download speed descending (higher is better)
-func SortResults(results []*speedtester.Result, fastMode bool) {
-	if fastMode {
+// SortResults sorts results based on speed mode.
+// fast: latency ascending (lower is better)
+// download/full: download speed descending (higher is better)
+func SortResults(results []*speedtester.Result, mode speedtester.SpeedMode) {
+	if mode.IsFast() {
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Latency < results[j].Latency
 		})

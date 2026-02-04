@@ -11,7 +11,7 @@ import (
 // TestTUIModelColorizeRow tests the colorizeRow function
 func TestTUIModelColorizeRow(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(false, 1, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFull, 1, resultChannel)
 
 	// Test latency coloring
 	t.Run("LatencyGreen", func(t *testing.T) {
@@ -192,7 +192,7 @@ func TestTUIModelColorizeRow(t *testing.T) {
 // TestTUIModelUpdateTableRows tests the updateTableRows function
 func TestTUIModelUpdateTableRows(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(false, 2, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFull, 2, resultChannel)
 
 	// Add a result
 	result := &speedtester.Result{
@@ -222,7 +222,7 @@ func TestTUIModelUpdateTableRows(t *testing.T) {
 // TestTUIModelUpdateTableRowsFastMode tests the updateTableRows function in fast mode
 func TestTUIModelUpdateTableRowsFastMode(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(true, 2, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFast, 2, resultChannel)
 
 	// Add a result
 	result := &speedtester.Result{
@@ -247,9 +247,25 @@ func TestTUIModelUpdateTableRowsFastMode(t *testing.T) {
 
 func TestCalculateColumnWidthsFitsWindow(t *testing.T) {
 	width := 100
-	widths := calculateColumnWidths(width, false)
+	widths := calculateColumnWidths(width, speedtester.SpeedModeFull)
 	if len(widths) != 8 {
 		t.Fatalf("expected 8 columns, got %d", len(widths))
+	}
+	total := 0
+	for _, value := range widths {
+		total += value
+	}
+	padding := 2 * len(widths)
+	if total+padding > width {
+		t.Fatalf("expected total width to fit window: columns=%d padding=%d window=%d", total, padding, width)
+	}
+}
+
+func TestCalculateColumnWidthsDownloadOnly(t *testing.T) {
+	width := 100
+	widths := calculateColumnWidths(width, speedtester.SpeedModeDownload)
+	if len(widths) != 7 {
+		t.Fatalf("expected 7 columns, got %d", len(widths))
 	}
 	total := 0
 	for _, value := range widths {

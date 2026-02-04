@@ -9,7 +9,7 @@ import (
 
 func TestTableScrollWithKeyboard(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 1)
-	model := NewTUIModel(false, 5, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 5, resultChannel)
 
 	model.results = []*speedtester.Result{
 		{ProxyName: "Proxy 1", ProxyType: "SS"},
@@ -33,7 +33,7 @@ func TestTableScrollWithKeyboard(t *testing.T) {
 
 func TestTableScrollWithMouseWheel(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 1)
-	model := NewTUIModel(false, 5, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 5, resultChannel)
 
 	model.results = []*speedtester.Result{
 		{ProxyName: "Proxy 1", ProxyType: "SS"},

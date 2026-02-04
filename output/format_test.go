@@ -9,7 +9,7 @@ import (
 
 func TestGetHeaders(t *testing.T) {
 	t.Run("fast mode", func(t *testing.T) {
-		headers := GetHeaders(true)
+		headers := GetHeaders(speedtester.SpeedModeFast)
 		expected := []string{"序号", "节点名称", "类型", "延迟"}
 		if len(headers) != len(expected) {
 			t.Errorf("expected %d headers, got %d", len(expected), len(headers))
@@ -21,8 +21,21 @@ func TestGetHeaders(t *testing.T) {
 		}
 	})
 
-	t.Run("normal mode", func(t *testing.T) {
-		headers := GetHeaders(false)
+	t.Run("download-only mode", func(t *testing.T) {
+		headers := GetHeaders(speedtester.SpeedModeDownload)
+		expected := []string{"序号", "节点名称", "类型", "延迟", "抖动", "丢包率", "下载速度"}
+		if len(headers) != len(expected) {
+			t.Errorf("expected %d headers, got %d", len(expected), len(headers))
+		}
+		for i, h := range headers {
+			if h != expected[i] {
+				t.Errorf("header %d: expected %q, got %q", i, expected[i], h)
+			}
+		}
+	})
+
+	t.Run("upload-enabled mode", func(t *testing.T) {
+		headers := GetHeaders(speedtester.SpeedModeFull)
 		expected := []string{"序号", "节点名称", "类型", "延迟", "抖动", "丢包率", "下载速度", "上传速度"}
 		if len(headers) != len(expected) {
 			t.Errorf("expected %d headers, got %d", len(expected), len(headers))
@@ -47,7 +60,7 @@ func TestFormatRow(t *testing.T) {
 	}
 
 	t.Run("fast mode", func(t *testing.T) {
-		row := FormatRow(result, true, 0)
+		row := FormatRow(result, speedtester.SpeedModeFast, 0)
 		if len(row) != 4 {
 			t.Errorf("expected 4 columns in fast mode, got %d", len(row))
 		}
@@ -65,10 +78,38 @@ func TestFormatRow(t *testing.T) {
 		}
 	})
 
-	t.Run("normal mode", func(t *testing.T) {
-		row := FormatRow(result, false, 0)
+	t.Run("download-only mode", func(t *testing.T) {
+		row := FormatRow(result, speedtester.SpeedModeDownload, 0)
+		if len(row) != 7 {
+			t.Errorf("expected 7 columns in download-only mode, got %d", len(row))
+		}
+		if row[0] != "1." {
+			t.Errorf("expected index '1.', got %q", row[0])
+		}
+		if row[1] != "Test Proxy" {
+			t.Errorf("expected proxy name 'Test Proxy', got %q", row[1])
+		}
+		if row[2] != "Trojan" {
+			t.Errorf("expected proxy type 'Trojan', got %q", row[2])
+		}
+		if row[3] != "500ms" {
+			t.Errorf("expected latency '500ms', got %q", row[3])
+		}
+		if row[4] != "100ms" {
+			t.Errorf("expected jitter '100ms', got %q", row[4])
+		}
+		if row[5] != "5.0%" {
+			t.Errorf("expected packet loss '5.0%%', got %q", row[5])
+		}
+		if row[6] != "10.00MB/s" {
+			t.Errorf("expected download speed '10.00MB/s', got %q", row[6])
+		}
+	})
+
+	t.Run("upload-enabled mode", func(t *testing.T) {
+		row := FormatRow(result, speedtester.SpeedModeFull, 0)
 		if len(row) != 8 {
-			t.Errorf("expected 8 columns in normal mode, got %d", len(row))
+			t.Errorf("expected 8 columns in upload-enabled mode, got %d", len(row))
 		}
 		if row[0] != "1." {
 			t.Errorf("expected index '1.', got %q", row[0])
@@ -96,7 +137,7 @@ func TestFormatRow(t *testing.T) {
 		}
 	})
 
-	t.Run("normal mode with errors", func(t *testing.T) {
+	t.Run("upload-enabled mode with errors", func(t *testing.T) {
 		errorResult := &speedtester.Result{
 			ProxyName:     "Error Proxy",
 			ProxyType:     "Trojan",
@@ -106,7 +147,7 @@ func TestFormatRow(t *testing.T) {
 			DownloadError: "download failed: timeout",
 			UploadError:   "upload failed: 500",
 		}
-		row := FormatRow(errorResult, false, 0)
+		row := FormatRow(errorResult, speedtester.SpeedModeFull, 0)
 		if row[6] != errorResult.DownloadError {
 			t.Errorf("expected download error in speed cell, got %q", row[6])
 		}
@@ -116,8 +157,8 @@ func TestFormatRow(t *testing.T) {
 	})
 
 	t.Run("index increment", func(t *testing.T) {
-		row1 := FormatRow(result, true, 0)
-		row2 := FormatRow(result, true, 1)
+		row1 := FormatRow(result, speedtester.SpeedModeFast, 0)
+		row2 := FormatRow(result, speedtester.SpeedModeFast, 1)
 		if row1[0] != "1." {
 			t.Errorf("expected first row index '1.', got %q", row1[0])
 		}
@@ -134,7 +175,7 @@ func TestSortResults(t *testing.T) {
 			{Latency: 100 * time.Millisecond},
 			{Latency: 300 * time.Millisecond},
 		}
-		SortResults(results, true)
+		SortResults(results, speedtester.SpeedModeFast)
 		if results[0].Latency != 100*time.Millisecond {
 			t.Errorf("expected first result latency 100ms, got %v", results[0].Latency)
 		}
@@ -152,7 +193,7 @@ func TestSortResults(t *testing.T) {
 			{DownloadSpeed: 20 * 1024 * 1024},
 			{DownloadSpeed: 10 * 1024 * 1024},
 		}
-		SortResults(results, false)
+		SortResults(results, speedtester.SpeedModeDownload)
 		if results[0].DownloadSpeed != 20*1024*1024 {
 			t.Errorf("expected first result download speed 20MB/s, got %v", results[0].DownloadSpeed)
 		}
@@ -166,7 +207,7 @@ func TestSortResults(t *testing.T) {
 
 	t.Run("empty results", func(t *testing.T) {
 		results := []*speedtester.Result{}
-		SortResults(results, true)
+		SortResults(results, speedtester.SpeedModeFast)
 		if len(results) != 0 {
 			t.Errorf("expected empty results, got %d items", len(results))
 		}
@@ -176,7 +217,7 @@ func TestSortResults(t *testing.T) {
 		results := []*speedtester.Result{
 			{Latency: 500 * time.Millisecond},
 		}
-		SortResults(results, true)
+		SortResults(results, speedtester.SpeedModeFast)
 		if len(results) != 1 {
 			t.Errorf("expected 1 result, got %d", len(results))
 		}
@@ -210,18 +251,18 @@ func TestResultFormatting(t *testing.T) {
 			},
 		}
 
-		// Test normal mode
-		headers := GetHeaders(false)
+		// Test upload-enabled mode
+		headers := GetHeaders(speedtester.SpeedModeFull)
 		if len(headers) != 8 {
-			t.Errorf("expected 8 headers in normal mode, got %d", len(headers))
+			t.Errorf("expected 8 headers in upload-enabled mode, got %d", len(headers))
 		}
 
-		SortResults(results, false)
+		SortResults(results, speedtester.SpeedModeFull)
 		if results[0].ProxyName != "Proxy B" {
 			t.Errorf("expected Proxy B first (higher download speed), got %s", results[0].ProxyName)
 		}
 
-		row := FormatRow(results[0], false, 0)
+		row := FormatRow(results[0], speedtester.SpeedModeFull, 0)
 		if len(row) != 8 {
 			t.Errorf("expected 8 columns, got %d", len(row))
 		}
@@ -230,17 +271,17 @@ func TestResultFormatting(t *testing.T) {
 		}
 
 		// Test fast mode
-		SortResults(results, true)
+		SortResults(results, speedtester.SpeedModeFast)
 		if results[0].ProxyName != "Proxy B" {
 			t.Errorf("expected Proxy B first (lower latency), got %s", results[0].ProxyName)
 		}
 
-		headers = GetHeaders(true)
+		headers = GetHeaders(speedtester.SpeedModeFast)
 		if len(headers) != 4 {
 			t.Errorf("expected 4 headers in fast mode, got %d", len(headers))
 		}
 
-		row = FormatRow(results[0], true, 0)
+		row = FormatRow(results[0], speedtester.SpeedModeFast, 0)
 		if len(row) != 4 {
 			t.Errorf("expected 4 columns, got %d", len(row))
 		}

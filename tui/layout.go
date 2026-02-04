@@ -12,7 +12,7 @@ func (m *tuiModel) updateTableLayout() {
 	if m.windowWidth == 0 || m.windowHeight == 0 {
 		return
 	}
-	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.fastMode)
+	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.mode)
 	m.table.SetColumns(columns)
 	m.table.SetWidth(m.windowWidth)
 	reserved := 2
@@ -22,7 +22,7 @@ func (m *tuiModel) updateTableLayout() {
 			reserved += detailHeight + 1
 		}
 	}
-	tableHeight := maxInt(6, m.windowHeight-reserved)
+	tableHeight := max(6, m.windowHeight-reserved)
 	m.table.SetHeight(tableHeight)
 }
 
@@ -37,13 +37,7 @@ func (m tuiModel) progressLine() string {
 	metrics := fmt.Sprintf("Elapsed %s | ETA %s", formatDuration(elapsed), eta)
 	barWidth := 40
 	if m.windowWidth > 0 {
-		available := m.windowWidth - lipgloss.Width(info) - lipgloss.Width(metrics) - lipgloss.Width(" | ") - 1
-		if available < 10 {
-			available = 10
-		}
-		if available > 40 {
-			available = 40
-		}
+		available := min(max(m.windowWidth-lipgloss.Width(info)-lipgloss.Width(metrics)-lipgloss.Width(" | ")-1, 10), 40)
 		barWidth = available
 	}
 	progressModel := m.progress
@@ -75,18 +69,8 @@ func formatETA(elapsed time.Duration, current, total int) string {
 		return "N/A"
 	}
 	estimatedTotal := time.Duration(float64(elapsed) / progress)
-	remaining := estimatedTotal - elapsed
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(estimatedTotal-elapsed, 0)
 	return formatDuration(remaining)
-}
-
-func maxInt(left int, right int) int {
-	if left > right {
-		return left
-	}
-	return right
 }
 
 func timerTickCmd() tea.Cmd {

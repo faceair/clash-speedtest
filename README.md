@@ -48,11 +48,13 @@ Usage of clash-speedtest:
   -b string
         block proxies by keywords, use | to separate multiple keywords (example: -b 'rate|x1|1x')
   -server-url string
-        server url for testing proxies (default "https://speed.cloudflare.com")
+        server url or direct download url (default "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg")
+  -speed-mode string
+        speed test mode: fast, download, full (default "download")
   -download-size int
         download size for testing proxies (default 50MB)
   -upload-size int
-        upload size for testing proxies (default 20MB)
+        upload size for testing proxies (full mode only) (default 20MB)
   -timeout duration
         timeout for testing proxies (default 5s)
   -concurrent int
@@ -66,11 +68,11 @@ Usage of clash-speedtest:
   -min-download-speed float
         filter speed less than this value(unit: MB/s) (default 5)
   -min-upload-speed float
-        filter upload speed less than this value(unit: MB/s) (default 2)
+        filter upload speed less than this value(unit: MB/s, full mode only) (default 2)
   -rename
         rename nodes with IP location and speed
   -fast
-        enable fast mode, only test latency
+        fast mode (alias for --speed-mode fast)
   -gist-token string
         GitHub personal access token for gist upload
   -gist-address string
@@ -124,7 +126,15 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 ## 测速原理
 
-通过 HTTP GET 请求下载指定大小的文件，默认使用 https://speed.cloudflare.com (50MB) 进行测试，计算下载时间得到下载速度。
+通过 HTTP GET 请求下载指定大小的文件，默认使用 https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg 进行测试，计算下载时间得到下载速度。因为 speedtest.cloudflare.com 容易返回 403，所以默认不再使用它作为测速入口。
+
+当 server-url 不带 path 时 (https://speedtest.cloudflare.com 或自建测速服务)，使用 /__down 和 /__up 完成下载与上传测试。
+当 server-url 带 path 时，会被识别为直接下载地址，只进行下载测速。
+
+如果你确认 speedtest.cloudflare.com 可以访问并希望测试上传，请显式设置为 full 模式，例如：
+```shell
+clash-speedtest --server-url "https://speed.cloudflare.com" --speed-mode full
+```
 
 测试结果：
 1. 带宽 是指下载指定大小文件的速度，即一般理解中的下载速度。当这个数值越高时表明节点的出口带宽越大。

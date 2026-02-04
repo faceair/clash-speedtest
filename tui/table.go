@@ -13,7 +13,7 @@ import (
 func (m *tuiModel) updateTableRows() {
 	rows := make([]table.Row, len(m.results))
 	for i, result := range m.results {
-		rows[i] = output.FormatRow(result, m.fastMode, i)
+		rows[i] = output.FormatRow(result, m.mode, i)
 	}
 	m.table.SetRows(rows)
 	m.syncSelection()
@@ -23,13 +23,13 @@ func (m *tuiModel) updateTableHeaders() {
 	if len(m.baseHeaders) == 0 {
 		return
 	}
-	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.fastMode)
+	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.mode)
 	m.table.SetColumns(columns)
 }
 
-func buildColumns(headers []string, width int, fastMode bool) []table.Column {
+func buildColumns(headers []string, width int, mode speedtester.SpeedMode) []table.Column {
 	columns := make([]table.Column, len(headers))
-	widths := calculateColumnWidths(width, fastMode)
+	widths := calculateColumnWidths(width, mode)
 	for i, h := range headers {
 		columnWidth := 10
 		if i < len(widths) {
@@ -40,22 +40,21 @@ func buildColumns(headers []string, width int, fastMode bool) []table.Column {
 	return columns
 }
 
-func calculateColumnWidths(width int, fastMode bool) []int {
+func calculateColumnWidths(width int, mode speedtester.SpeedMode) []int {
 	columnPadding := 2
-	columnCount := 8
-	if fastMode {
+	columnCount := 7
+	if mode.IsFast() {
 		columnCount = 4
+	} else if mode.UploadEnabled() {
+		columnCount = 8
 	}
 	windowWidth := width
 	availableWidth := width
 	if width > 0 {
-		availableWidth = width - columnCount*columnPadding
-		if availableWidth < 0 {
-			availableWidth = 0
-		}
+		availableWidth = max(width-columnCount*columnPadding, 0)
 	}
 
-	if fastMode {
+	if mode.IsFast() {
 		indexWidth := 6
 		typeWidth := 12
 		latencyWidth := 10
@@ -67,7 +66,7 @@ func calculateColumnWidths(width int, fastMode bool) []int {
 		minTypeWidth := 6
 		minLatencyWidth := 6
 		fixedWidth := indexWidth + typeWidth + latencyWidth
-		nameWidth := maxInt(minNameWidth, availableWidth-fixedWidth)
+		nameWidth := max(minNameWidth, availableWidth-fixedWidth)
 		widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth}
 		minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth}
 		shrinkOrder := []int{1, 3, 2, 0}
@@ -82,7 +81,10 @@ func calculateColumnWidths(width int, fastMode bool) []int {
 	downloadWidth := 16
 	uploadWidth := 16
 	if windowWidth <= 0 {
-		return []int{indexWidth, 30, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
+		if mode.UploadEnabled() {
+			return []int{indexWidth, 30, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
+		}
+		return []int{indexWidth, 30, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth}
 	}
 	minIndexWidth := 4
 	minNameWidth := 4
@@ -92,11 +94,19 @@ func calculateColumnWidths(width int, fastMode bool) []int {
 	minLossWidth := 6
 	minDownloadWidth := 6
 	minUploadWidth := 6
-	fixedWidth := indexWidth + typeWidth + latencyWidth + jitterWidth + lossWidth + downloadWidth + uploadWidth
-	nameWidth := maxInt(minNameWidth, availableWidth-fixedWidth)
-	widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
-	minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth, minJitterWidth, minLossWidth, minDownloadWidth, minUploadWidth}
-	shrinkOrder := []int{1, 6, 7, 4, 5, 3, 2, 0}
+	if mode.UploadEnabled() {
+		fixedWidth := indexWidth + typeWidth + latencyWidth + jitterWidth + lossWidth + downloadWidth + uploadWidth
+		nameWidth := max(minNameWidth, availableWidth-fixedWidth)
+		widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
+		minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth, minJitterWidth, minLossWidth, minDownloadWidth, minUploadWidth}
+		shrinkOrder := []int{1, 6, 7, 4, 5, 3, 2, 0}
+		return shrinkWidthsToFit(windowWidth, columnPadding, widths, minWidths, shrinkOrder)
+	}
+	fixedWidth := indexWidth + typeWidth + latencyWidth + jitterWidth + lossWidth + downloadWidth
+	nameWidth := max(minNameWidth, availableWidth-fixedWidth)
+	widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth}
+	minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth, minJitterWidth, minLossWidth, minDownloadWidth}
+	shrinkOrder := []int{1, 6, 4, 5, 3, 2, 0}
 	return shrinkWidthsToFit(windowWidth, columnPadding, widths, minWidths, shrinkOrder)
 }
 
@@ -105,10 +115,7 @@ func shrinkWidthsToFit(windowWidth int, columnPadding int, widths []int, minWidt
 		return widths
 	}
 	padding := columnPadding * len(widths)
-	maxTotal := windowWidth - padding
-	if maxTotal < 0 {
-		maxTotal = 0
-	}
+	maxTotal := max(windowWidth-padding, 0)
 	total := 0
 	for _, value := range widths {
 		total += value
@@ -278,7 +285,7 @@ func (m *tuiModel) colorizeRow(row []string, result *speedtester.Result) table.R
 		latencyStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(latencyStr) // red
 	}
 
-	if m.fastMode {
+	if m.mode.IsFast() {
 		return table.Row{row[0], row[1], row[2], latencyStr}
 	}
 
@@ -315,6 +322,18 @@ func (m *tuiModel) colorizeRow(row []string, result *speedtester.Result) table.R
 		downloadSpeedStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFF00")).Render(downloadSpeedStr) // yellow
 	} else {
 		downloadSpeedStr = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(downloadSpeedStr) // red
+	}
+
+	if !m.mode.UploadEnabled() {
+		return table.Row{
+			row[0],
+			row[1],
+			row[2],
+			latencyStr,
+			jitterStr,
+			packetLossStr,
+			downloadSpeedStr,
+		}
 	}
 
 	// Upload speed: >=5MB/s green, >=2MB/s yellow, <2MB/s red

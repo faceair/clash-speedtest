@@ -13,11 +13,11 @@ func TestTUIModelUpdate(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
 
 	// Create a new TUI model
-	model := NewTUIModel(false, 3, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 3, resultChannel)
 
 	// Verify initial state
-	if model.fastMode != false {
-		t.Errorf("Expected fastMode to be false, got %v", model.fastMode)
+	if model.mode != speedtester.SpeedModeDownload {
+		t.Errorf("Expected mode to be %v, got %v", speedtester.SpeedModeDownload, model.mode)
 	}
 	if model.totalProxies != 3 {
 		t.Errorf("Expected totalProxies to be 3, got %d", model.totalProxies)
@@ -164,11 +164,11 @@ func TestTUIModelUpdateFastMode(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
 
 	// Create a new TUI model in fast mode
-	model := NewTUIModel(true, 3, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFast, 3, resultChannel)
 
 	// Verify initial state
-	if model.fastMode != true {
-		t.Errorf("Expected fastMode to be true, got %v", model.fastMode)
+	if model.mode != speedtester.SpeedModeFast {
+		t.Errorf("Expected mode to be %v, got %v", speedtester.SpeedModeFast, model.mode)
 	}
 
 	// Create test results (only latency matters in fast mode)

@@ -10,7 +10,7 @@ import (
 
 func TestTUIModelHeaderClickSort(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(false, 3, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 3, resultChannel)
 
 	result1 := &speedtester.Result{
 		ProxyName:     "Proxy 1",
@@ -73,7 +73,7 @@ func headerClickX(model tuiModel, column int) int {
 
 func TestSortResultsLatencyNA(t *testing.T) {
 	resultChannel := make(chan *speedtester.Result, 10)
-	model := NewTUIModel(true, 2, resultChannel)
+	model := NewTUIModel(speedtester.SpeedModeFast, 2, resultChannel)
 
 	naResult := &speedtester.Result{
 		ProxyName:   "NA",
