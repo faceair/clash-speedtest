@@ -14,11 +14,15 @@ func (m *tuiModel) toggleDetail(result *speedtester.Result) {
 	}
 	if m.detailVisible && m.detailResult == result {
 		m.detailVisible = false
+		m.help.setDetailVisible(false)
+		m.detailHeight = 0
 		m.updateTableLayout()
 		return
 	}
 	m.detailResult = result
 	m.detailVisible = true
+	m.help.setDetailVisible(true)
+	m.refreshDetailHeight()
 	m.updateTableLayout()
 }
 
@@ -51,6 +55,20 @@ func (m tuiModel) detailPanelWidth() int {
 }
 
 func (m tuiModel) detailPanelHeight() int {
+	if !m.detailVisible || m.detailResult == nil {
+		return 0
+	}
+	if m.detailHeight > 0 {
+		return m.detailHeight
+	}
+	return m.calculateDetailHeight()
+}
+
+func (m *tuiModel) refreshDetailHeight() {
+	m.detailHeight = m.calculateDetailHeight()
+}
+
+func (m tuiModel) calculateDetailHeight() int {
 	if !m.detailVisible || m.detailResult == nil {
 		return 0
 	}

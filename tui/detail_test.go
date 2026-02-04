@@ -125,3 +125,46 @@ func TestBuildDetailContentDownloadOnly(t *testing.T) {
 		t.Fatalf("expected download-only detail to omit upload error, got %q", content)
 	}
 }
+
+func TestDetailPanelHeightUpdatesOnSelectionChange(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 10)
+	model := NewTUIModel(speedtester.SpeedModeFull, 2, resultChannel)
+	model.windowWidth = 80
+	model.windowHeight = 30
+
+	shortResult := &speedtester.Result{
+		ProxyName:     "Short",
+		ProxyType:     "SS",
+		Latency:       120 * time.Millisecond,
+		Jitter:        20 * time.Millisecond,
+		PacketLoss:    1.0,
+		DownloadError: "timeout",
+		UploadError:   "timeout",
+	}
+	longResult := &speedtester.Result{
+		ProxyName:     "Long",
+		ProxyType:     "Trojan",
+		Latency:       180 * time.Millisecond,
+		Jitter:        30 * time.Millisecond,
+		PacketLoss:    2.0,
+		DownloadError: strings.Repeat("download error ", 8),
+		UploadError:   strings.Repeat("upload error ", 8),
+	}
+
+	model.results = []*speedtester.Result{shortResult, longResult}
+	model.updateTableRows()
+	model.detailVisible = true
+	model.detailResult = shortResult
+	model.updateTableLayout()
+	initialHeight := model.table.Height()
+
+	model.table.SetCursor(1)
+	model.syncSelectionFromCursor()
+	updatedHeight := model.table.Height()
+	if model.detailResult != longResult {
+		t.Fatalf("expected detail result to update to selected row, got %v", model.detailResult)
+	}
+	if initialHeight == updatedHeight {
+		t.Fatalf("expected table height to change after detail content update: initial=%d updated=%d", initialHeight, updatedHeight)
+	}
+}

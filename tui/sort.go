@@ -34,6 +34,8 @@ func defaultSortAscending(column int) bool {
 }
 
 func (m *tuiModel) sortResults() {
+	start := time.Now()
+	defer m.perf.record(perfEventSort, len(m.results), start)
 	sort.SliceStable(m.results, func(i, j int) bool {
 		comparison := m.compareResults(m.results[i], m.results[j])
 		if m.sortAscending {

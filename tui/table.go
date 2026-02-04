@@ -11,6 +11,8 @@ import (
 
 // updateTableRows updates the table rows with current results
 func (m *tuiModel) updateTableRows() {
+	start := time.Now()
+	defer m.perf.record(perfEventRows, len(m.results), start)
 	rows := make([]table.Row, len(m.results))
 	for i, result := range m.results {
 		rows[i] = output.FormatRow(result, m.mode, i)
@@ -246,7 +248,15 @@ func (m *tuiModel) syncSelectionFromCursor() {
 	}
 	m.selectedIndex = cursor
 	if m.detailVisible {
-		m.detailResult = m.results[cursor]
+		if m.detailResult != m.results[cursor] {
+			previousHeight := m.detailHeight
+			m.detailResult = m.results[cursor]
+			m.refreshDetailHeight()
+			if m.detailHeight != previousHeight {
+				// Keep layout in sync when detail content height changes on scroll.
+				m.updateTableLayout()
+			}
+		}
 	}
 	m.table.Focus()
 }

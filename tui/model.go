@@ -26,28 +26,35 @@ type doneMsg struct{}
 
 type timerTickMsg struct{}
 
+type flushResultsMsg struct{}
+
 // tuiModel represents the Bubble Tea model for the TUI
 type tuiModel struct {
-	mode          speedtester.SpeedMode
-	totalProxies  int
-	currentProxy  int
-	results       []*speedtester.Result
-	sequence      map[*speedtester.Result]int
-	nextSequence  int
-	baseHeaders   []string
-	testing       bool
-	quitting      bool
-	progress      progress.Model
-	table         table.Model
-	resultChannel chan *speedtester.Result
-	sortColumn    int
-	sortAscending bool
-	detailVisible bool
-	detailResult  *speedtester.Result
-	selectedIndex int
-	windowWidth   int
-	windowHeight  int
-	startTime     time.Time
+	mode           speedtester.SpeedMode
+	totalProxies   int
+	currentProxy   int
+	results        []*speedtester.Result
+	sequence       map[*speedtester.Result]int
+	nextSequence   int
+	baseHeaders    []string
+	testing        bool
+	quitting       bool
+	progress       progress.Model
+	table          table.Model
+	help           helpState
+	resultChannel  chan *speedtester.Result
+	sortColumn     int
+	sortAscending  bool
+	detailVisible  bool
+	detailResult   *speedtester.Result
+	selectedIndex  int
+	windowWidth    int
+	windowHeight   int
+	startTime      time.Time
+	resultsDirty   bool
+	flushScheduled bool
+	detailHeight   int
+	perf           *perfTracker
 }
 
 const (
@@ -55,6 +62,7 @@ const (
 	tableHeaderLines    = 2
 	detailPanelMinWidth = 60
 	defaultDetailWidth  = 80
+	resultFlushInterval = 100 * time.Millisecond
 )
 
 var selectedRowStyle = lipgloss.NewStyle().
@@ -93,26 +101,31 @@ func NewTUIModel(mode speedtester.SpeedMode, totalProxies int, resultChannel cha
 	t.SetStyles(s)
 
 	return tuiModel{
-		mode:          mode,
-		totalProxies:  totalProxies,
-		currentProxy:  0,
-		results:       make([]*speedtester.Result, 0),
-		sequence:      make(map[*speedtester.Result]int),
-		nextSequence:  0,
-		baseHeaders:   headers,
-		testing:       true,
-		quitting:      false,
-		progress:      p,
-		table:         t,
-		resultChannel: resultChannel,
-		sortColumn:    sortColumn,
-		sortAscending: sortAscending,
-		detailVisible: false,
-		detailResult:  nil,
-		selectedIndex: -1,
-		windowWidth:   0,
-		windowHeight:  0,
-		startTime:     time.Now(),
+		mode:           mode,
+		totalProxies:   totalProxies,
+		currentProxy:   0,
+		results:        make([]*speedtester.Result, 0),
+		sequence:       make(map[*speedtester.Result]int),
+		nextSequence:   0,
+		baseHeaders:    headers,
+		testing:        true,
+		quitting:       false,
+		progress:       p,
+		table:          t,
+		help:           newHelpState(t.KeyMap),
+		resultChannel:  resultChannel,
+		sortColumn:     sortColumn,
+		sortAscending:  sortAscending,
+		detailVisible:  false,
+		detailResult:   nil,
+		selectedIndex:  -1,
+		windowWidth:    0,
+		windowHeight:   0,
+		startTime:      time.Now(),
+		resultsDirty:   false,
+		flushScheduled: false,
+		detailHeight:   0,
+		perf:           newPerfTracker(),
 	}
 }
 
@@ -135,6 +148,21 @@ func (m tuiModel) waitForResult() tea.Cmd {
 	}
 }
 
+func scheduleFlushCmd() tea.Cmd {
+	return tea.Tick(resultFlushInterval, func(time.Time) tea.Msg {
+		return flushResultsMsg{}
+	})
+}
+
+func (m *tuiModel) flushResultsIfDirty() {
+	if !m.resultsDirty {
+		return
+	}
+	m.sortResults()
+	m.updateTableRows()
+	m.resultsDirty = false
+}
+
 // Update handles messages and updates the model
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -145,6 +173,8 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			if m.detailVisible {
 				m.detailVisible = false
+				m.help.setDetailVisible(false)
+				m.detailHeight = 0
 				m.updateTableLayout()
 				return m, nil
 			}
@@ -180,6 +210,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sortResults()
 					m.updateTableHeaders()
 					m.updateTableRows()
+					m.resultsDirty = false
 				}
 				return m, nil
 			}
@@ -193,6 +224,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.windowWidth = msg.Width
 		m.windowHeight = msg.Height
+		m.refreshDetailHeight()
 		m.updateTableLayout()
 		return m, nil
 
@@ -200,18 +232,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentProxy++
 		m.results = append(m.results, msg.result)
 		m.recordSequence(msg.result)
-
-		// Sort results after each update
-		m.sortResults()
-
-		// Update table rows
-		m.updateTableRows()
-
+		m.resultsDirty = true
 		progressCmd := m.progress.SetPercent(float64(m.currentProxy) / float64(m.totalProxies))
-		return m, tea.Batch(progressCmd, m.waitForResult())
+		cmds := []tea.Cmd{progressCmd, m.waitForResult()}
+		if !m.flushScheduled {
+			m.flushScheduled = true
+			cmds = append(cmds, scheduleFlushCmd())
+		}
+		return m, tea.Batch(cmds...)
 
 	case doneMsg:
 		m.testing = false
+		m.flushScheduled = false
+		m.flushResultsIfDirty()
 		progressCmd := m.progress.SetPercent(1.0)
 		return m, progressCmd
 
@@ -229,6 +262,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case timerTickMsg:
 		return m, timerTickCmd()
+
+	case flushResultsMsg:
+		m.flushScheduled = false
+		m.flushResultsIfDirty()
+		return m, nil
 	}
 
 	// Default: update progress bar for other messages
@@ -249,19 +287,17 @@ func (m tuiModel) View() string {
 	tableView := m.table.View()
 	detailView := m.detailPanelView()
 
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
+	sections := []string{
 		m.progressLine(),
 		"",
 		tableView,
-	)
-	if detailView != "" {
-		content = lipgloss.JoinVertical(
-			lipgloss.Left,
-			content,
-			"",
-			detailView,
-		)
 	}
-	return content
+	if detailView != "" {
+		sections = append(sections, "", detailView)
+	}
+	helpView := m.help.view()
+	if helpView != "" {
+		sections = append(sections, "", helpView)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }

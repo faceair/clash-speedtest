@@ -12,15 +12,22 @@ func (m *tuiModel) updateTableLayout() {
 	if m.windowWidth == 0 || m.windowHeight == 0 {
 		return
 	}
+	start := time.Now()
+	defer m.perf.record(perfEventLayout, len(m.results), start)
 	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.mode)
 	m.table.SetColumns(columns)
 	m.table.SetWidth(m.windowWidth)
+	m.help.setWidth(m.windowWidth)
 	reserved := 2
 	if m.detailVisible && m.detailResult != nil {
 		detailHeight := m.detailPanelHeight()
 		if detailHeight > 0 {
 			reserved += detailHeight + 1
 		}
+	}
+	helpHeight := m.help.height()
+	if helpHeight > 0 {
+		reserved += helpHeight + 1
 	}
 	tableHeight := max(6, m.windowHeight-reserved)
 	m.table.SetHeight(tableHeight)

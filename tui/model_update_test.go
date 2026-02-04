@@ -104,15 +104,6 @@ func TestTUIModelUpdate(t *testing.T) {
 		t.Errorf("Expected results length to be 2, got %d", len(updatedModel.(tuiModel).results))
 	}
 
-	// Verify results are sorted by download speed (descending)
-	// result1 (15 MB/s) should be first, result2 (8 MB/s) should be second
-	if updatedModel.(tuiModel).results[0] != result1 {
-		t.Error("Expected first result to be result1")
-	}
-	if updatedModel.(tuiModel).results[1] != result2 {
-		t.Error("Expected second result to be result2")
-	}
-
 	// Send third result
 	resultChannel <- result3
 	updatedModel, cmd = updatedModel.(tuiModel).Update(resultMsg{result: result3})
@@ -128,6 +119,9 @@ func TestTUIModelUpdate(t *testing.T) {
 	if len(updatedModel.(tuiModel).results) != 3 {
 		t.Errorf("Expected results length to be 3, got %d", len(updatedModel.(tuiModel).results))
 	}
+
+	// Flush updates to apply sorting and table refresh.
+	updatedModel, _ = updatedModel.(tuiModel).Update(flushResultsMsg{})
 
 	// Verify results are sorted by download speed (descending)
 	// result1 (15 MB/s) > result2 (8 MB/s) > result3 (3 MB/s)
@@ -202,6 +196,8 @@ func TestTUIModelUpdateFastMode(t *testing.T) {
 
 	resultChannel <- result3
 	updatedModel, _ = updatedModel.(tuiModel).Update(resultMsg{result: result3})
+
+	updatedModel, _ = updatedModel.(tuiModel).Update(flushResultsMsg{})
 
 	// Verify results are sorted by latency (ascending)
 	// result2 (100ms) < result3 (200ms) < result1 (300ms)
