@@ -123,6 +123,7 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 > clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "https://gist.github.com/username/abc123"
 # 测试完成后，会将 result.yaml 上传到指定的 Gist，文件名为 fastsub.yaml
 # gist-address 可以是完整的 Gist URL，也可以是 Gist ID（如 abc123）
+```
 
 ## 测速原理
 
