@@ -129,7 +129,7 @@ func main() {
 			// Save results once all tests finish, without blocking the TUI loop.
 			go func() {
 				<-resultsDone
-				output.SortResults(results, effectiveMode)
+				results = output.SortResults(results, effectiveMode)
 				saveResult <- saveConfig(results, effectiveMode)
 			}()
 		}
@@ -167,7 +167,7 @@ func main() {
 		}
 	})
 
-	output.SortResults(results, effectiveMode)
+	results = output.SortResults(results, effectiveMode)
 
 	if *outputPath != "" {
 		err = saveConfig(results, effectiveMode)

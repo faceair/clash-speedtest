@@ -175,7 +175,7 @@ func TestSortResults(t *testing.T) {
 			{Latency: 100 * time.Millisecond},
 			{Latency: 300 * time.Millisecond},
 		}
-		SortResults(results, speedtester.SpeedModeFast)
+		results = SortResults(results, speedtester.SpeedModeFast)
 		if results[0].Latency != 100*time.Millisecond {
 			t.Errorf("expected first result latency 100ms, got %v", results[0].Latency)
 		}
@@ -193,7 +193,7 @@ func TestSortResults(t *testing.T) {
 			{DownloadSpeed: 20 * 1024 * 1024},
 			{DownloadSpeed: 10 * 1024 * 1024},
 		}
-		SortResults(results, speedtester.SpeedModeDownload)
+		results = SortResults(results, speedtester.SpeedModeDownload)
 		if results[0].DownloadSpeed != 20*1024*1024 {
 			t.Errorf("expected first result download speed 20MB/s, got %v", results[0].DownloadSpeed)
 		}
@@ -207,7 +207,7 @@ func TestSortResults(t *testing.T) {
 
 	t.Run("empty results", func(t *testing.T) {
 		results := []*speedtester.Result{}
-		SortResults(results, speedtester.SpeedModeFast)
+		results = SortResults(results, speedtester.SpeedModeFast)
 		if len(results) != 0 {
 			t.Errorf("expected empty results, got %d items", len(results))
 		}
@@ -217,12 +217,60 @@ func TestSortResults(t *testing.T) {
 		results := []*speedtester.Result{
 			{Latency: 500 * time.Millisecond},
 		}
-		SortResults(results, speedtester.SpeedModeFast)
+		results = SortResults(results, speedtester.SpeedModeFast)
 		if len(results) != 1 {
 			t.Errorf("expected 1 result, got %d", len(results))
 		}
 		if results[0].Latency != 500*time.Millisecond {
 			t.Errorf("expected latency 500ms, got %v", results[0].Latency)
+		}
+	})
+
+	t.Run("deduplicate by server and port", func(t *testing.T) {
+		results := []*speedtester.Result{
+			{
+				Latency:     200 * time.Millisecond,
+				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": 443},
+			},
+			{
+				Latency:     100 * time.Millisecond,
+				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": "443"},
+			},
+			{
+				Latency:     150 * time.Millisecond,
+				ProxyConfig: map[string]any{"server": "2.2.2.2", "port": float64(443)},
+			},
+		}
+		results = SortResults(results, speedtester.SpeedModeFast)
+		if len(results) != 2 {
+			t.Errorf("expected 2 results after deduplication, got %d", len(results))
+		}
+		if results[0].Latency != 100*time.Millisecond {
+			t.Errorf("expected lowest latency to remain after deduplication, got %v", results[0].Latency)
+		}
+		if results[1].ProxyConfig["server"] != "2.2.2.2" {
+			t.Errorf("expected different server to remain, got %v", results[1].ProxyConfig["server"])
+		}
+	})
+
+	t.Run("missing server or port is not deduplicated", func(t *testing.T) {
+		results := []*speedtester.Result{
+			{
+				Latency:     100 * time.Millisecond,
+				ProxyConfig: map[string]any{"server": "1.1.1.1"},
+			},
+			{
+				Latency:     200 * time.Millisecond,
+				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": 80},
+			},
+			{
+				Latency:     300 * time.Millisecond,
+				ProxyConfig: map[string]any{"port": 80},
+			},
+		}
+		results = SortResults(results, speedtester.SpeedModeFast)
+		if len(results) != 3 {
+			t.Errorf("expected results to remain when server or port missing, got %d", len(results))
 		}
 	})
 }
@@ -257,7 +305,7 @@ func TestResultFormatting(t *testing.T) {
 			t.Errorf("expected 8 headers in upload-enabled mode, got %d", len(headers))
 		}
 
-		SortResults(results, speedtester.SpeedModeFull)
+		results = SortResults(results, speedtester.SpeedModeFull)
 		if results[0].ProxyName != "Proxy B" {
 			t.Errorf("expected Proxy B first (higher download speed), got %s", results[0].ProxyName)
 		}
@@ -271,7 +319,7 @@ func TestResultFormatting(t *testing.T) {
 		}
 
 		// Test fast mode
-		SortResults(results, speedtester.SpeedModeFast)
+		results = SortResults(results, speedtester.SpeedModeFast)
 		if results[0].ProxyName != "Proxy B" {
 			t.Errorf("expected Proxy B first (lower latency), got %s", results[0].ProxyName)
 		}

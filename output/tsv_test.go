@@ -36,7 +36,6 @@ func TestNewTSVWriter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var output strings.Builder
 			writer, err := NewTSVWriter(&output, tt.mode)
-
 			if err != nil {
 				t.Fatalf("NewTSVWriter failed: %v", err)
 			}
@@ -99,7 +98,7 @@ func TestTSVWriter_WriteRow(t *testing.T) {
 				UploadSpeed:   0,
 			},
 			index:       2,
-			expectedRow: "3.\tFailed Proxy\tShadowsocks\tN/A\tN/A\t100.0%\t0.00B/s\n",
+			expectedRow: "3.\tFailed Proxy\tShadowsocks\tN/A\tN/A\t100.0%\tN/A\n",
 		},
 		{
 			name: "upload-enabled row with errors",
