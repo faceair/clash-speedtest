@@ -127,15 +127,26 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 
 ## 测速原理
 
-通过 HTTP GET 请求下载指定大小的文件，默认使用 https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg 进行测试，计算下载时间得到下载速度。因为 speedtest.cloudflare.com 容易返回 403，所以默认不再使用它作为测速入口。
+通过 HTTP GET 请求下载指定大小的文件，默认使用 https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg 进行测试，计算下载时间得到下载速度。因为 speed.cloudflare.com 容易返回 403，所以默认不再使用它作为测速入口。
 
-当 server-url 不带 path 时 (https://speedtest.cloudflare.com 或自建测速服务)，使用 /__down 和 /__up 完成下载与上传测试。
+当 server-url 不带 path 时 (使用 https://speed.cloudflare.com 或自建测速服务)，使用 /__down 和 /__up 完成下载与上传测试。
 当 server-url 带 path 时，会被识别为直接下载地址，只进行下载测速。
 
-如果你确认 speedtest.cloudflare.com 可以访问并希望测试上传，请显式设置为 full 模式，例如：
+如果你确认 https://speed.cloudflare.com 可以访问并希望测试上传，请显式设置为 full 模式，例如：
 ```shell
 clash-speedtest --server-url "https://speed.cloudflare.com" --speed-mode full
 ```
+或者你也可以自己搭建一个测速服务器，用来测试下载和上传速度：
+
+```shell
+# 在您需要进行测速的服务器上安装和启动测速服务器
+> go install github.com/faceair/clash-speedtest/download-server@latest
+> download-server
+
+# 此时在本地使用 http://your-server-ip:8080 作为 server-url 即可
+> clash-speedtest --server-url "http://your-server-ip:8080" --speed-mode full
+```
+
 
 测试结果：
 1. 带宽 是指下载指定大小文件的速度，即一般理解中的下载速度。当这个数值越高时表明节点的出口带宽越大。
@@ -144,19 +155,6 @@ clash-speedtest --server-url "https://speed.cloudflare.com" --speed-mode full
 请注意带宽跟延迟是两个独立的指标，两者并不关联：
 1. 可能带宽很高但是延迟也很高，这种情况下你下载速度很快但是打开网页的时候却很慢，可能是是中转节点没有 BGP 加速，但出海线路带宽很充足。
 2. 可能带宽很低但是延迟也很低，这种情况下你打开网页的时候很快但是下载速度很慢，可能是中转节点有 BGP 加速，但出海线路的 IEPL、IPLC 带宽很小。
-
-Cloudflare 是全球知名的 CDN 服务商，其提供的测速服务器到海外绝大部分的节点速度都很快，一般情况下都没有必要自建测速服务器。
-
-如果你不想使用 Cloudflare 的测速服务器，可以自己搭建一个测速服务器。
-
-```shell
-# 在您需要进行测速的服务器上安装和启动测速服务器
-> go install github.com/faceair/clash-speedtest/download-server@latest
-> download-server
-
-# 此时在本地使用 http://your-server-ip:8080 作为 server-url 即可
-> clash-speedtest --server-url "http://your-server-ip:8080"
-```
 
 ## License
 
