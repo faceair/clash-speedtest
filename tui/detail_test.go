@@ -62,3 +62,47 @@ func TestTUIModelDetailPanelToggle(t *testing.T) {
 		t.Fatalf("expected detail panel to close on second click")
 	}
 }
+
+func TestTUIModelDetailPanelEscRestoresLayout(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 10)
+	model := NewTUIModel(false, 1, resultChannel)
+	model.windowWidth = 120
+	model.windowHeight = 40
+
+	result := &speedtester.Result{
+		ProxyName: "Error Proxy",
+		ProxyType: "Trojan",
+		Latency:   200 * time.Millisecond,
+	}
+	model.results = append(model.results, result)
+	model.updateTableRows()
+	model.updateTableLayout()
+	closedHeight := model.table.Height()
+
+	rowY := model.tableHeaderY() + tableHeaderLines
+	click := tea.MouseMsg{
+		X:      1,
+		Y:      rowY,
+		Action: tea.MouseActionRelease,
+		Button: tea.MouseButtonLeft,
+	}
+
+	opened, _ := model.Update(click)
+	openedModel := opened.(tuiModel)
+	if !openedModel.detailVisible {
+		t.Fatalf("expected detail panel to be visible after click")
+	}
+	openedHeight := openedModel.table.Height()
+	if openedHeight >= closedHeight {
+		t.Fatalf("expected table height to shrink when detail is visible: closed=%d opened=%d", closedHeight, openedHeight)
+	}
+
+	closed, _ := openedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	closedModel := closed.(tuiModel)
+	if closedModel.detailVisible {
+		t.Fatalf("expected detail panel to close on ESC")
+	}
+	if closedModel.table.Height() != closedHeight {
+		t.Fatalf("expected table height to restore after ESC close: want=%d got=%d", closedHeight, closedModel.table.Height())
+	}
+}

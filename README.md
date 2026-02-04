@@ -13,7 +13,11 @@ Features:
 ## Prerequisites/注意事项
 
 ### OpenWRT 环境
-在 OpenWRT 环境下使用本工具时，建议临时关闭 OpenClash/Clash 等代理服务，以避免路由冲突影响测速结果的准确性。
+在 OpenWRT 环境下使用本工具时，建议临时关闭 OpenClash/Clash/Mihomo 等代理服务，以避免路由冲突影响测速结果的准确性。或者给 OpenClash/Clash/Mihomo 配置进程规则绕过代理：
+```
+rules:
+  - PROCESS-NAME,clash-speedtest,DIRECT
+```
 
 ### Windows CMD 用户
 在 Windows CMD 中使用时，如果订阅地址包含 `&` 字符，必须使用双引号而非单引号：
@@ -67,6 +71,10 @@ Usage of clash-speedtest:
         rename nodes with IP location and speed
   -fast
         enable fast mode, only test latency
+  -gist-token string
+        GitHub personal access token for gist upload
+  -gist-address string
+        gist URL or ID for uploading output file (filename: fastsub.yaml)
 
 # 演示：
 
@@ -108,6 +116,11 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 3.      🇭🇰 香港 HK-15           Trojan          674ms
 4.      🇭🇰 香港 HK-19           Trojan          649ms
 5.      🇭🇰 香港 HK-12           Trojan          667ms
+
+# 7. 上传到 GitHub Gist
+> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "https://gist.github.com/username/abc123"
+# 测试完成后，会将 result.yaml 上传到指定的 Gist，文件名为 fastsub.yaml
+# gist-address 可以是完整的 Gist URL，也可以是 Gist ID（如 abc123）
 
 ## 测速原理
 

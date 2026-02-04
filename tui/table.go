@@ -42,14 +42,16 @@ func buildColumns(headers []string, width int, fastMode bool) []table.Column {
 
 func calculateColumnWidths(width int, fastMode bool) []int {
 	columnPadding := 2
+	columnCount := 8
+	if fastMode {
+		columnCount = 4
+	}
+	windowWidth := width
+	availableWidth := width
 	if width > 0 {
-		columnCount := 8
-		if fastMode {
-			columnCount = 4
-		}
-		width = width - columnCount*columnPadding
-		if width < 40 {
-			width = 40
+		availableWidth = width - columnCount*columnPadding
+		if availableWidth < 0 {
+			availableWidth = 0
 		}
 	}
 
@@ -57,12 +59,19 @@ func calculateColumnWidths(width int, fastMode bool) []int {
 		indexWidth := 6
 		typeWidth := 12
 		latencyWidth := 10
-		if width <= 0 {
+		if windowWidth <= 0 {
 			return []int{indexWidth, 30, typeWidth, latencyWidth}
 		}
+		minIndexWidth := 4
+		minNameWidth := 4
+		minTypeWidth := 6
+		minLatencyWidth := 6
 		fixedWidth := indexWidth + typeWidth + latencyWidth
-		nameWidth := maxInt(10, width-fixedWidth)
-		return []int{indexWidth, nameWidth, typeWidth, latencyWidth}
+		nameWidth := maxInt(minNameWidth, availableWidth-fixedWidth)
+		widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth}
+		minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth}
+		shrinkOrder := []int{1, 3, 2, 0}
+		return shrinkWidthsToFit(windowWidth, columnPadding, widths, minWidths, shrinkOrder)
 	}
 
 	indexWidth := 6
@@ -72,12 +81,59 @@ func calculateColumnWidths(width int, fastMode bool) []int {
 	lossWidth := 10
 	downloadWidth := 16
 	uploadWidth := 16
-	if width <= 0 {
+	if windowWidth <= 0 {
 		return []int{indexWidth, 30, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
 	}
+	minIndexWidth := 4
+	minNameWidth := 4
+	minTypeWidth := 6
+	minLatencyWidth := 6
+	minJitterWidth := 6
+	minLossWidth := 6
+	minDownloadWidth := 6
+	minUploadWidth := 6
 	fixedWidth := indexWidth + typeWidth + latencyWidth + jitterWidth + lossWidth + downloadWidth + uploadWidth
-	nameWidth := maxInt(10, width-fixedWidth)
-	return []int{indexWidth, nameWidth, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
+	nameWidth := maxInt(minNameWidth, availableWidth-fixedWidth)
+	widths := []int{indexWidth, nameWidth, typeWidth, latencyWidth, jitterWidth, lossWidth, downloadWidth, uploadWidth}
+	minWidths := []int{minIndexWidth, minNameWidth, minTypeWidth, minLatencyWidth, minJitterWidth, minLossWidth, minDownloadWidth, minUploadWidth}
+	shrinkOrder := []int{1, 6, 7, 4, 5, 3, 2, 0}
+	return shrinkWidthsToFit(windowWidth, columnPadding, widths, minWidths, shrinkOrder)
+}
+
+func shrinkWidthsToFit(windowWidth int, columnPadding int, widths []int, minWidths []int, shrinkOrder []int) []int {
+	if windowWidth <= 0 {
+		return widths
+	}
+	padding := columnPadding * len(widths)
+	maxTotal := windowWidth - padding
+	if maxTotal < 0 {
+		maxTotal = 0
+	}
+	total := 0
+	for _, value := range widths {
+		total += value
+	}
+	overflow := total - maxTotal
+	for overflow > 0 {
+		shrunk := false
+		for _, idx := range shrinkOrder {
+			if idx < 0 || idx >= len(widths) || idx >= len(minWidths) {
+				continue
+			}
+			if widths[idx] > minWidths[idx] {
+				widths[idx]--
+				overflow--
+				shrunk = true
+				if overflow == 0 {
+					break
+				}
+			}
+		}
+		if !shrunk {
+			break
+		}
+	}
+	return widths
 }
 
 func addSortIndicators(headers []string, sortColumn int, sortAscending bool) []string {

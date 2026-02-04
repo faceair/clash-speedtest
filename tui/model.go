@@ -119,7 +119,6 @@ func NewTUIModel(fastMode bool, totalProxies int, resultChannel chan *speedteste
 // Init initializes the TUI model
 func (m tuiModel) Init() tea.Cmd {
 	return tea.Batch(
-		tea.EnterAltScreen,
 		timerTickCmd(),
 		m.waitForResult(),
 	)
@@ -146,6 +145,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			if m.detailVisible {
 				m.detailVisible = false
+				m.updateTableLayout()
 				return m, nil
 			}
 		case "q", "ctrl+c":

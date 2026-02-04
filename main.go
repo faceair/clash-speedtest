@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/faceair/clash-speedtest/gist"
 	"github.com/faceair/clash-speedtest/ip"
 	"github.com/faceair/clash-speedtest/output"
 	"github.com/faceair/clash-speedtest/speedtester"
@@ -31,6 +32,8 @@ var (
 	timeout           = flag.Duration("timeout", time.Second*5, "timeout for testing proxies")
 	concurrent        = flag.Int("concurrent", 4, "download concurrent size")
 	outputPath        = flag.String("output", "", "output config file path")
+	gistToken         = flag.String("gist-token", "", "github gist token for updating output")
+	gistAddress       = flag.String("gist-address", "", "github gist address or id for updating output")
 	maxLatency        = flag.Duration("max-latency", 800*time.Millisecond, "filter latency greater than this value")
 	maxPacketLoss     = flag.Float64("max-packet-loss", 100, "filter packet loss greater than this value(unit: %)")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
@@ -120,6 +123,7 @@ func main() {
 		// Create and run TUI
 		p := tea.NewProgram(
 			tui.NewTUIModel(*fastMode, len(allProxies), resultChannel),
+			tea.WithAltScreen(),
 			tea.WithMouseAllMotion(),
 		)
 		if _, err := p.Run(); err != nil {
@@ -179,7 +183,7 @@ func saveConfig(results []*speedtester.Result) error {
 		}
 
 		proxyConfig := result.ProxyConfig
-		if *renameNodes {
+		if *renameNodes && proxyConfig["server"] != nil {
 			location, err := ip.GetIPLocation(proxyConfig["server"].(string))
 			if err != nil || location.CountryCode == "" {
 				proxies = append(proxies, proxyConfig)
@@ -198,5 +202,16 @@ func saveConfig(results []*speedtester.Result) error {
 		return err
 	}
 
-	return os.WriteFile(*outputPath, yamlData, 0o644)
+	if err := os.WriteFile(*outputPath, yamlData, 0o644); err != nil {
+		return err
+	}
+
+	if *gistToken != "" && *gistAddress != "" {
+		uploader := gist.NewUploader(nil)
+		if err := uploader.UpdateFile(*gistToken, *gistAddress, "fastsub.yaml", yamlData); err != nil {
+			log.Warnln("update gist failed: %v", err)
+		}
+	}
+
+	return nil
 }

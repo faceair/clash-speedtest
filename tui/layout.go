@@ -14,6 +14,7 @@ func (m *tuiModel) updateTableLayout() {
 	}
 	columns := buildColumns(addSortIndicators(m.baseHeaders, m.sortColumn, m.sortAscending), m.windowWidth, m.fastMode)
 	m.table.SetColumns(columns)
+	m.table.SetWidth(m.windowWidth)
 	reserved := 2
 	if m.detailVisible && m.detailResult != nil {
 		detailHeight := m.detailPanelHeight()
