@@ -198,7 +198,10 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 		}
 
 		proxyConfig := result.ProxyConfig
-		if *renameNodes && proxyConfig["server"] != nil {
+		if proxyConfig["name"] == nil || proxyConfig["server"] == nil {
+			continue
+		}
+		if *renameNodes {
 			location, err := ip.GetIPLocation(proxyConfig["server"].(string))
 			if err != nil || location.CountryCode == "" {
 				proxies = append(proxies, proxyConfig)

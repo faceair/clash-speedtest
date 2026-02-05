@@ -216,6 +216,9 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			}
 			pdProxies := make(map[string]map[string]any)
 			for _, pdProxy := range pdRawCfg.Proxies {
+				if pdProxy["name"] == nil || pdProxy["server"] == nil {
+					continue
+				}
 				pdProxies[pdProxy["name"].(string)] = pdProxy
 			}
 			for _, proxy := range pd.Proxies() {
