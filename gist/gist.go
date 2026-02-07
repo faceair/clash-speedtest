@@ -22,6 +22,28 @@ type Uploader struct {
 	userAgent string
 }
 
+// SetProxy configures dedicated HTTPS proxy for gist upload requests.
+// Empty value keeps the default environment proxy behavior.
+func (u *Uploader) SetProxy(httpsProxy string) error {
+	trimmedHTTPSProxy := strings.TrimSpace(httpsProxy)
+	if trimmedHTTPSProxy == "" {
+		return nil
+	}
+
+	proxyFunc, err := buildProxyFunc(trimmedHTTPSProxy)
+	if err != nil {
+		return err
+	}
+
+	transport, err := cloneTransport(u.client.Transport)
+	if err != nil {
+		return err
+	}
+	transport.Proxy = proxyFunc
+	u.client.Transport = transport
+	return nil
+}
+
 type updateRequest struct {
 	Files map[string]gistFile `json:"files"`
 }
@@ -177,4 +199,60 @@ func isLikelyGistID(value string) bool {
 		}
 	}
 	return true
+}
+
+func buildProxyFunc(httpsProxy string) (func(*http.Request) (*url.URL, error), error) {
+	httpsProxyURL, err := parseProxyURL(httpsProxy, "HTTPS")
+	if err != nil {
+		return nil, err
+	}
+
+	return func(request *http.Request) (*url.URL, error) {
+		if request == nil || request.URL == nil {
+			return nil, nil
+		}
+
+		switch request.URL.Scheme {
+		case "https":
+			if httpsProxyURL != nil {
+				return httpsProxyURL, nil
+			}
+		}
+
+		return http.ProxyFromEnvironment(request)
+	}, nil
+}
+
+func parseProxyURL(value, proxyType string) (*url.URL, error) {
+	if value == "" {
+		return nil, nil
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s proxy %q failed: %w", proxyType, value, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("%s proxy %q has unsupported scheme %q, only http/https are allowed", proxyType, value, parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("%s proxy %q missing host", proxyType, value)
+	}
+	return parsed, nil
+}
+
+func cloneTransport(roundTripper http.RoundTripper) (*http.Transport, error) {
+	if roundTripper == nil {
+		defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			return nil, fmt.Errorf("clone default transport failed: unexpected type %T", http.DefaultTransport)
+		}
+		return defaultTransport.Clone(), nil
+	}
+
+	transport, ok := roundTripper.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("configure gist proxy failed: unsupported transport type %T", roundTripper)
+	}
+	return transport.Clone(), nil
 }

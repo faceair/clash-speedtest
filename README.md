@@ -77,6 +77,8 @@ Usage of clash-speedtest:
         GitHub personal access token for gist upload
   -gist-address string
         gist URL or ID for uploading output file (filename uses output basename)
+  -gist-https-proxy string
+        HTTPS proxy for gist upload requests (example: http://127.0.0.1:7890)
 
 # 演示：
 
@@ -123,6 +125,9 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 > clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "https://gist.github.com/username/abc123"
 # 测试完成后，会将 result.yaml 上传到指定的 Gist，文件名与 -output 保持一致（去除目录前缀）
 # gist-address 可以是完整的 Gist URL，也可以是 Gist ID（如 abc123）
+
+# 8. 通过 HTTPS 代理上传到 GitHub Gist
+> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "abc123" -gist-https-proxy "http://127.0.0.1:7890"
 ```
 
 ## 测速原理
