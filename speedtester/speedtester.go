@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
 	"github.com/metacubex/mihomo/constant"
-	"github.com/metacubex/mihomo/log"
 	"gopkg.in/yaml.v2"
 )
 
@@ -153,7 +153,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			var resp *http.Response
 			resp, err = http.Get(configPath)
 			if err != nil {
-				log.Warnln("failed to fetch config: %s", err)
+				log.Printf("failed to fetch config: %s", err)
 				continue
 			}
 			body, err = io.ReadAll(resp.Body)
@@ -161,7 +161,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			body, err = os.ReadFile(configPath)
 		}
 		if err != nil {
-			log.Warnln("failed to read config: %s", err)
+			log.Printf("failed to read config: %s", err)
 			continue
 		}
 
@@ -195,13 +195,13 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
 			if err := pd.Initial(); err != nil {
-				log.Errorln("initial proxy provider %s error: %v", pd.Name(), err)
+				log.Printf("initial proxy provider %s error: %v", pd.Name(), err)
 				continue
 			}
 
 			resp, err := http.Get(config["url"].(string))
 			if err != nil {
-				log.Warnln("failed to fetch config: %s", err)
+				log.Printf("failed to fetch config: %s", err)
 				continue
 			}
 			body, err = io.ReadAll(resp.Body)

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -13,7 +14,7 @@ import (
 	"github.com/faceair/clash-speedtest/output"
 	"github.com/faceair/clash-speedtest/speedtester"
 	"github.com/faceair/clash-speedtest/tui"
-	"github.com/metacubex/mihomo/log"
+	mihomolog "github.com/metacubex/mihomo/log"
 	"gopkg.in/yaml.v2"
 )
 
@@ -48,7 +49,7 @@ var (
 
 func main() {
 	flag.Parse()
-	log.SetLevel(log.SILENT)
+	mihomolog.SetLevel(mihomolog.SILENT)
 
 	// Handle version flag
 	if *versionFlag {
@@ -164,7 +165,7 @@ func main() {
 
 		if tsvWriter != nil {
 			if err := tsvWriter.WriteRow(result, len(results)-1); err != nil {
-				log.Warnln("write TSV row failed: %v", err)
+				log.Printf("write TSV row failed: %v", err)
 			}
 		}
 	})
@@ -228,12 +229,12 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 	if *gistToken != "" && *gistAddress != "" {
 		uploader := gist.NewUploader(nil)
 		if err := uploader.SetProxy(*gistHTTPSProxy); err != nil {
-			log.Warnln("configure gist upload proxy failed: %v", err)
+			log.Printf("configure gist upload proxy failed: %v", err)
 			return nil
 		}
 		outputFilename := filepath.Base(filepath.Clean(*outputPath))
 		if err := uploader.UpdateFile(*gistToken, *gistAddress, outputFilename, yamlData); err != nil {
-			log.Warnln("update gist failed: %v", err)
+			log.Printf("update gist failed: %v", err)
 		}
 	}
 
