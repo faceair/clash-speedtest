@@ -45,6 +45,7 @@ var (
 	renameNodes       = flag.Bool("rename", true, "rename nodes with IP location and speed")
 	fastMode          = flag.Bool("fast", false, "fast mode (alias for --speed-mode fast)")
 	versionFlag       = flag.Bool("v", false, "show version information")
+	userAgent         = flag.String("ua", "", "User-Agent for fetching config from http(s) URL (default: mihomo kernel UA, e.g. mihomo/1.10.0)")
 )
 
 func main() {
@@ -85,6 +86,7 @@ func main() {
 		MinUploadSpeed:   *minUploadSpeed * 1024 * 1024,
 		Mode:             requestedMode,
 		OutputPath:       *outputPath,
+		UserAgent:        *userAgent,
 	})
 	if err != nil {
 		log.Fatalln("create speed tester failed: %v", err)

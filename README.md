@@ -43,6 +43,8 @@ rules:
 Usage of clash-speedtest:
   -c string
         configuration file path, also support http(s) url
+  -ua string
+        User-Agent for fetching config from http(s) URL (default: mihomo kernel UA, e.g. mihomo/1.10.0)
   -f string
         filter proxies by name, use regexp (default ".*")
   -b string

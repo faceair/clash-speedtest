@@ -37,6 +37,7 @@ type Config struct {
 	MinUploadSpeed   float64
 	Mode             SpeedMode
 	OutputPath       string
+	UserAgent        string // optional; empty means use default (mihomo kernel UA)
 }
 
 type serverMode int
@@ -45,6 +46,32 @@ const (
 	serverModeDownloadServer serverMode = iota
 	serverModeDirectDownload
 )
+
+// defaultFetchConfigUA returns the default User-Agent (mihomo kernel format) when none is set.
+func defaultFetchConfigUA() string {
+	return constant.MihomoName + "/" + constant.Version
+}
+
+func (st *SpeedTester) fetchConfigUA() string {
+	if st.config.UserAgent != "" {
+		return st.config.UserAgent
+	}
+	return defaultFetchConfigUA()
+}
+
+func (st *SpeedTester) fetchHTTPConfig(targetURL string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", st.fetchConfigUA())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
 
 type serverTarget struct {
 	mode        serverMode
@@ -150,13 +177,11 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		var body []byte
 		var err error
 		if strings.HasPrefix(configPath, "http") {
-			var resp *http.Response
-			resp, err = http.Get(configPath)
+			body, err = st.fetchHTTPConfig(strings.TrimSpace(configPath))
 			if err != nil {
 				log.Printf("failed to fetch config: %s", err)
 				continue
 			}
-			body, err = io.ReadAll(resp.Body)
 		} else {
 			body, err = os.ReadFile(configPath)
 		}
@@ -199,14 +224,10 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				continue
 			}
 
-			resp, err := http.Get(config["url"].(string))
+			body, err = st.fetchHTTPConfig(config["url"].(string))
 			if err != nil {
 				log.Printf("failed to fetch config: %s", err)
 				continue
-			}
-			body, err = io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
 			}
 			pdRawCfg := &RawConfig{
 				Proxies: []map[string]any{},
