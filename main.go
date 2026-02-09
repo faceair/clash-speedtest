@@ -198,7 +198,8 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 		if *maxPacketLoss >= 0 && result.PacketLoss > *maxPacketLoss {
 			continue
 		}
-		if *downloadSize > 0 && *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed*1024*1024 {
+		// 仅在实际测过下载时按下载速度过滤（fast 模式不测下载，DownloadSpeed 恒为 0）
+		if !mode.IsFast() && *downloadSize > 0 && *minDownloadSpeed > 0 && result.DownloadSpeed < *minDownloadSpeed*1024*1024 {
 			continue
 		}
 		if mode.UploadEnabled() && *minUploadSpeed > 0 && result.UploadSpeed < *minUploadSpeed*1024*1024 {
