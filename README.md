@@ -79,8 +79,14 @@ Usage of clash-speedtest:
         GitHub personal access token for gist upload
   -gist-address string
         gist URL or ID for uploading output file (filename uses output basename)
-  -gist-https-proxy string
-        HTTPS proxy for gist upload requests (example: http://127.0.0.1:7890)
+  -repo-token string
+        GitHub personal access token for repository file upload
+  -repo-address string
+        repository URL or owner/repo for uploading output file
+  -repo-file-path string
+        repository file path for uploading output file (default: output basename)
+  -repo-branch string
+        repository branch for uploading output file (default: repository default branch)
 
 # 演示：
 
@@ -124,15 +130,61 @@ Premium|广港|IEPL|05                        	3.87MB/s    	249.00ms
 5.      🇭🇰 香港 HK-12           Trojan          667ms
 
 # 7. 上传到 GitHub Gist
-> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "https://gist.github.com/username/abc123"
+> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "https://gist.github.com/user/abc123"
 # 测试完成后，会将 result.yaml 上传到指定的 Gist，文件名与 -output 保持一致（去除目录前缀）
 # gist-address 可以是完整的 Gist URL，也可以是 Gist ID（如 abc123）
-# 8. 通过 HTTPS 代理上传到 GitHub Gist
-> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "abc123" -gist-https-proxy "http://127.0.0.1:7890"
+# Gist/Repo 上传与远程配置 URL 加载默认遵循环境代理变量（HTTPS_PROXY/HTTP_PROXY）。
 
-# 9. 使用带鉴权信息的代理 URL 上传到 GitHub Gist
-> clash-speedtest -c config.yaml -output result.yaml -gist-token "ghp_xxx" -gist-address "abc123" -gist-https-proxy "http://alice:secret@127.0.0.1:7890"
+# 8. 上传到 GitHub 仓库文件（默认写入 output 文件名）
+> clash-speedtest -c config.yaml -output result.yaml -repo-token "ghp_xxx" -repo-address "user/repo"
+# 测试完成后，会将 result.yaml 上传到仓库默认分支下的 result.yaml
+
+# 9. 上传到 GitHub 仓库指定分支与路径
+> clash-speedtest -c config.yaml -output result.yaml -repo-token "ghp_xxx" -repo-address "https://github.com/user/repo" -repo-file-path "configs/subscriptions/result.yaml" -repo-branch "main"
 ```
+
+## GitHub Token 创建与权限
+
+### 1) 更新 Gist（`-gist-token`）
+
+推荐使用 **Personal access tokens (classic)**：
+
+1. 打开 GitHub `Settings` → `Developer settings` → `Personal access tokens` → `Tokens (classic)`。
+2. 点击 `Generate new token (classic)`。
+3. 仅勾选最小权限：`gist`。
+4. 生成后复制 token，作为 `-gist-token` 传入。
+
+最小权限结论：
+- `gist`：必需（用于通过 API 更新 Gist 文件）。
+
+### 2) 更新仓库文件（`-repo-token`）
+
+可选两种 token：
+
+#### A. Fine-grained PAT（推荐）
+
+1. 打开 GitHub `Settings` → `Developer settings` → `Personal access tokens` → `Fine-grained tokens`。
+2. `Repository access` 选择目标仓库（建议 `Only select repositories`）。
+3. 在 `Repository permissions` 中设置：
+   - `Contents`: **Read and write**（必需）
+4. 生成后复制 token，作为 `-repo-token` 传入。
+
+#### B. Tokens (classic)
+
+- 更新**公开仓库**文件：至少 `public_repo`。
+- 更新**私有仓库**文件：至少 `repo`。
+
+最小权限结论：
+- Fine-grained PAT：`Contents: Read and write`。
+- Classic PAT：公有仓库 `public_repo`，私有仓库 `repo`。
+
+### 常见权限问题
+
+- `401 Unauthorized`：token 无效、过期，或复制时有空格/换行。
+- `403 Forbidden`：token 权限不足，或目标分支启用了保护策略（可能禁止直接 push/commit）。
+- `404 Not Found`：仓库地址/路径/分支不正确，或 token 对该仓库不可见。
+
+> 安全建议：不要把 token 提交到仓库；优先通过环境变量或 CI Secret 注入。
 
 ## 测速原理
 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,7 +38,10 @@ var (
 	outputPath        = flag.String("output", "", "output config file path")
 	gistToken         = flag.String("gist-token", "", "github gist token for updating output")
 	gistAddress       = flag.String("gist-address", "", "github gist address or id for updating output (filename uses output basename)")
-	gistHTTPSProxy    = flag.String("gist-https-proxy", "", "https proxy for gist upload requests (example: http://127.0.0.1:7890)")
+	repoToken         = flag.String("repo-token", "", "github token for updating repository file")
+	repoAddress       = flag.String("repo-address", "", "github repository address or owner/repo for updating output")
+	repoFilePath      = flag.String("repo-file-path", "", "repository file path for uploading output (default: output basename)")
+	repoBranch        = flag.String("repo-branch", "", "repository branch for uploading output (default: repository default branch)")
 	maxLatency        = flag.Duration("max-latency", time.Second, "filter latency greater than this value")
 	maxPacketLoss     = flag.Float64("max-packet-loss", 100, "filter packet loss greater than this value(unit: %)")
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
@@ -227,16 +231,23 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 	if err := os.WriteFile(*outputPath, yamlData, 0o644); err != nil {
 		return err
 	}
+	outputFilename := filepath.Base(filepath.Clean(*outputPath))
 
 	if *gistToken != "" && *gistAddress != "" {
 		uploader := gist.NewUploader(nil)
-		if err := uploader.SetProxy(*gistHTTPSProxy); err != nil {
-			log.Printf("configure gist upload proxy failed: %v", err)
-			return nil
-		}
-		outputFilename := filepath.Base(filepath.Clean(*outputPath))
 		if err := uploader.UpdateFile(*gistToken, *gistAddress, outputFilename, yamlData); err != nil {
 			log.Printf("update gist failed: %v", err)
+		}
+	}
+
+	if *repoToken != "" && *repoAddress != "" {
+		uploader := gist.NewUploader(nil)
+		repositoryFilePath := strings.TrimSpace(*repoFilePath)
+		if repositoryFilePath == "" {
+			repositoryFilePath = outputFilename
+		}
+		if err := uploader.UpdateRepoFile(*repoToken, *repoAddress, repositoryFilePath, *repoBranch, yamlData); err != nil {
+			log.Printf("update repo file failed: %v", err)
 		}
 	}
 

@@ -134,66 +134,18 @@ func TestUpdateFile(t *testing.T) {
 	})
 }
 
-func TestSetProxy(t *testing.T) {
-	t.Run("invalid proxy url", func(t *testing.T) {
-		uploader := NewUploader(nil)
-		err := uploader.SetProxy("127.0.0.1:7890")
-		if err == nil {
-			t.Fatalf("expected error for invalid proxy url")
-		}
-		if !strings.Contains(err.Error(), "parse HTTPS proxy") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
+func TestProxyFromEnvironmentForHTTPS(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:18080")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:18443")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 
-	t.Run("set dedicated https proxy", func(t *testing.T) {
-		uploader := NewUploader(nil)
-		if err := uploader.SetProxy("http://127.0.0.1:7890"); err != nil {
-			t.Fatalf("set proxy failed: %v", err)
-		}
-
-		transport, ok := uploader.client.Transport.(*http.Transport)
-		if !ok {
-			t.Fatalf("unexpected transport type: %T", uploader.client.Transport)
-		}
-		if transport.Proxy == nil {
-			t.Fatalf("proxy function was not configured")
-		}
-
-		resolved, err := transport.Proxy(&http.Request{URL: &url.URL{Scheme: "https", Host: "api.github.com"}})
-		if err != nil {
-			t.Fatalf("resolve https proxy failed: %v", err)
-		}
-		if resolved == nil || resolved.String() != "http://127.0.0.1:7890" {
-			t.Fatalf("unexpected resolved proxy: %v", resolved)
-		}
-	})
-}
-
-func TestBuildProxyFunc(t *testing.T) {
-	t.Run("explicit https proxy and environment fallback", func(t *testing.T) {
-		t.Setenv("HTTP_PROXY", "http://127.0.0.1:18080")
-		t.Setenv("HTTPS_PROXY", "http://127.0.0.1:18443")
-
-		proxyFunc, err := buildProxyFunc("http://127.0.0.1:28080")
-		if err != nil {
-			t.Fatalf("build proxy func failed: %v", err)
-		}
-
-		httpProxy, err := proxyFunc(&http.Request{URL: &url.URL{Scheme: "http", Host: "api.github.com"}})
-		if err != nil {
-			t.Fatalf("resolve http proxy failed: %v", err)
-		}
-		if httpProxy == nil || httpProxy.String() != "http://127.0.0.1:18080" {
-			t.Fatalf("unexpected http proxy: %v", httpProxy)
-		}
-
-		httpsProxy, err := proxyFunc(&http.Request{URL: &url.URL{Scheme: "https", Host: "api.github.com"}})
-		if err != nil {
-			t.Fatalf("resolve https proxy failed: %v", err)
-		}
-		if httpsProxy == nil || httpsProxy.String() != "http://127.0.0.1:28080" {
-			t.Fatalf("unexpected https proxy: %v", httpsProxy)
-		}
-	})
+	request := &http.Request{URL: &url.URL{Scheme: "https", Host: "api.github.com"}}
+	proxy, err := http.ProxyFromEnvironment(request)
+	if err != nil {
+		t.Fatalf("resolve https proxy from environment failed: %v", err)
+	}
+	if proxy == nil || proxy.String() != "http://127.0.0.1:18443" {
+		t.Fatalf("expected HTTPS_PROXY to be used, got: %v", proxy)
+	}
 }
