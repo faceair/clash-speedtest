@@ -487,6 +487,8 @@ type latencyResult struct {
 
 func (st *SpeedTester) testLatency(proxy constant.Proxy, minLatency time.Duration) *latencyResult {
 	client := st.createClient(proxy, minLatency)
+	defer client.CloseIdleConnections()
+
 	latencies := make([]time.Duration, 0, 6)
 	failedPings := 0
 
@@ -590,6 +592,8 @@ func (s *transferSummary) averageDuration() time.Duration {
 
 func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
+	defer client.CloseIdleConnections()
+
 	start := time.Now()
 	var downloadURL string
 	if st.serverMode == serverModeDirectDownload {
@@ -630,6 +634,8 @@ func (st *SpeedTester) testDownload(proxy constant.Proxy, size int, timeout time
 
 func (st *SpeedTester) testUpload(proxy constant.Proxy, size int, timeout time.Duration) *downloadResult {
 	client := st.createClient(proxy, timeout)
+	defer client.CloseIdleConnections()
+
 	reader := NewZeroReader(size)
 	uploadURL := fmt.Sprintf("%s/__up", st.serverBaseURL)
 
