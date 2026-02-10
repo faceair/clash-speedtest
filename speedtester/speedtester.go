@@ -21,6 +21,7 @@ import (
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
 	"github.com/metacubex/mihomo/constant"
+	"golang.org/x/net/proxy"
 	"gopkg.in/yaml.v2"
 )
 
@@ -40,6 +41,7 @@ type Config struct {
 	Mode             SpeedMode
 	OutputPath       string
 	UserAgent        string // optional; empty means use default (mihomo kernel UA)
+	FetchProxy       string // optional; HTTP or SOCKS5 proxy URL for fetching config from http(s)
 }
 
 type serverMode int
@@ -52,6 +54,41 @@ const (
 // defaultFetchConfigUA returns the default User-Agent (mihomo kernel format) when none is set.
 func defaultFetchConfigUA() string {
 	return constant.MihomoName + "/" + constant.Version
+}
+
+// buildFetchHTTPClient creates an http.Client that uses the given proxy for requests.
+// proxyURL may be http, https, or socks5 (e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:7891).
+func buildFetchHTTPClient(proxyURL string) (*http.Client, error) {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" {
+		return nil, fmt.Errorf("proxy URL is empty")
+	}
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse proxy URL: %w", err)
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("proxy URL missing host")
+	}
+	transport := &http.Transport{}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+		transport.Proxy = http.ProxyURL(parsed)
+	case "socks5":
+		dialer, err := proxy.SOCKS5("tcp", parsed.Host, nil, proxy.Direct)
+		if err != nil {
+			return nil, fmt.Errorf("SOCKS5 proxy: %w", err)
+		}
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported proxy scheme %q (use http, https, or socks5)", parsed.Scheme)
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}, nil
 }
 
 func (st *SpeedTester) fetchConfigUA() string {
@@ -67,7 +104,11 @@ func (st *SpeedTester) fetchHTTPConfig(targetURL string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", st.fetchConfigUA())
-	resp, err := http.DefaultClient.Do(req)
+	client := st.fetchHTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +130,7 @@ type SpeedTester struct {
 	serverBaseURL    string
 	downloadURL      string
 	mode             SpeedMode
+	fetchHTTPClient  *http.Client // for fetching config from http(s) URL; nil means use DefaultClient
 }
 
 func New(config *Config) (*SpeedTester, error) {
@@ -116,13 +158,21 @@ func New(config *Config) (*SpeedTester, error) {
 		mode = SpeedModeDownload
 	}
 	config.Mode = mode
-	return &SpeedTester{
+	st := &SpeedTester{
 		config:        config,
 		serverMode:    target.mode,
 		serverBaseURL: target.baseURL,
 		downloadURL:   target.downloadURL,
 		mode:          mode,
-	}, nil
+	}
+	if strings.TrimSpace(config.FetchProxy) != "" {
+		client, err := buildFetchHTTPClient(config.FetchProxy)
+		if err != nil {
+			return nil, fmt.Errorf("proxy for fetch: %w", err)
+		}
+		st.fetchHTTPClient = client
+	}
+	return st, nil
 }
 
 func (st *SpeedTester) Mode() SpeedMode {
