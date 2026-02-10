@@ -194,7 +194,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			Proxies: []map[string]any{},
 		}
 		if err := yaml.Unmarshal(body, rawCfg); err != nil {
-			return nil, fmt.Errorf("unable to parse config: %w, body: %s", err, body)
+			return nil, fmt.Errorf("unable to parse config at path %s: %w, body: %s", configPath, err, body)
 		}
 		proxies := make(map[string]*CProxy)
 		proxiesConfig := rawCfg.Proxies
