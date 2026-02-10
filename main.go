@@ -47,6 +47,7 @@ var (
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s, full mode only)")
 	renameNodes       = flag.Bool("rename", true, "rename nodes with IP location and speed")
+	renameTemplate    = flag.String("rename-template", "", "name template for renaming (Go text/template). Placeholders: {{.Flag}}, {{.CountryCode}}, {{.Index}}, {{.Direction}}, {{.Speed}}, {{.DownloadSpeedMBps}}, {{.UploadSpeedMBps}}. Empty = default format")
 	fastMode          = flag.Bool("fast", false, "fast mode (alias for --speed-mode fast)")
 	versionFlag       = flag.Bool("v", false, "show version information")
 	userAgent         = flag.String("ua", "", "User-Agent for fetching config from http(s) URL (default: mihomo kernel UA, e.g. mihomo/1.10.0)")
@@ -216,7 +217,12 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 				proxies = append(proxies, proxyConfig)
 				continue
 			}
-			proxyConfig["name"] = ip.GenerateNodeName(location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
+			name, err := ip.GenerateNodeNameFromTemplate(*renameTemplate, location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
+			if err != nil {
+				log.Printf("rename template parse error: %v, use default name", err)
+				name = ip.GenerateNodeName(location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
+			}
+			proxyConfig["name"] = name
 		}
 		proxies = append(proxies, proxyConfig)
 	}

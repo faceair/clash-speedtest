@@ -62,3 +62,34 @@ func TestGenerateNodeNameUnknownCountry(t *testing.T) {
 		t.Errorf("Expected %s, got %s", expected, name)
 	}
 }
+
+func TestGenerateNodeNameFromTemplate(t *testing.T) {
+	nameCount := make(map[string]int)
+
+	// custom template
+	name, err := GenerateNodeNameFromTemplate("{{.CountryCode}}-{{.Index}} {{.Speed}}MB/s", "US", 10*1024*1024, 0, nameCount)
+	if err != nil {
+		t.Fatalf("template error: %v", err)
+	}
+	expected := "US-001 10.00MB/s"
+	if name != expected {
+		t.Errorf("Expected %s, got %s", expected, name)
+	}
+
+	// empty template uses default
+	nameCount2 := make(map[string]int)
+	name2, err := GenerateNodeNameFromTemplate("", "HK", 5*1024*1024, 0, nameCount2)
+	if err != nil {
+		t.Fatalf("template error: %v", err)
+	}
+	expected2 := "🇭🇰 HK 001 | ⬇️ 5.00MB/s"
+	if name2 != expected2 {
+		t.Errorf("Expected %s, got %s", expected2, name2)
+	}
+
+	// invalid template returns error
+	_, err = GenerateNodeNameFromTemplate("{{.Invalid", "US", 0, 0, make(map[string]int))
+	if err == nil {
+		t.Error("expected parse error for invalid template")
+	}
+}
