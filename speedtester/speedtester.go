@@ -1,7 +1,6 @@
 package speedtester
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -16,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
@@ -170,30 +168,6 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-// sanitizeYAMLBody removes or replaces control characters that go-yaml rejects
-// (e.g. "yaml: control characters are not allowed"). Tabs are replaced with spaces;
-// other control chars (except \n, \r) are removed; \r is normalized to \n.
-func sanitizeYAMLBody(body []byte) []byte {
-	var b bytes.Buffer
-	b.Grow(len(body))
-	for _, r := range string(body) {
-		switch {
-		case r == '\t':
-			b.WriteString("  ") // YAML indentation must be spaces
-		case r == '\r':
-			b.WriteRune('\n')
-		case r == '\n':
-			b.WriteRune(r)
-		case unicode.IsControl(r):
-			// drop other control characters
-			continue
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.Bytes()
-}
-
 func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
 	st.blockedNodes = make([]string, 0)
@@ -216,7 +190,6 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			continue
 		}
 
-		body = sanitizeYAMLBody(body)
 		rawCfg := &RawConfig{
 			Proxies: []map[string]any{},
 		}
@@ -256,7 +229,6 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				log.Printf("failed to fetch config: %s", err)
 				continue
 			}
-			body = sanitizeYAMLBody(body)
 			pdRawCfg := &RawConfig{
 				Proxies: []map[string]any{},
 			}
