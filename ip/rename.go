@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+	"time"
 )
 
 var countryFlags = map[string]string{
@@ -25,23 +26,25 @@ var countryFlags = map[string]string{
 }
 
 // DefaultNameTemplate is the built-in format when -rename-template is not set.
-const DefaultNameTemplate = `{{.Flag}} {{.CountryCode}} {{.Index}} | {{.Direction}} {{.Speed}}MB/s`
+const DefaultNameTemplate = `{{.Flag}} {{.CountryCode}} {{.Index}} | {{.Direction}} {{.Speed}}{{.SpeedUnit}}`
 
 // NodeNameData is the data passed to the rename template.
 type NodeNameData struct {
-	Flag               string // country flag emoji
-	CountryCode        string // e.g. US, HK
-	Index              string // padded number, e.g. 001
-	Direction          string // ⬇️ or ⬆️
-	Speed              string // main speed in MB/s (e.g. 12.34)
-	DownloadSpeedMBps  string // download MB/s
-	UploadSpeedMBps    string // upload MB/s
+	Flag              string // country flag emoji
+	CountryCode       string // e.g. US, HK
+	Index             string // padded number, e.g. 001
+	Direction         string // ⬇️, ⬆️, or ⚡
+	Speed             string // primary metric value
+	SpeedUnit         string // MB/s or ms
+	LatencyMs         string // latency in milliseconds
+	DownloadSpeedMBps string // download MB/s
+	UploadSpeedMBps   string // upload MB/s
 }
 
 // GenerateNodeNameFromTemplate renders name from a text/template. Placeholders:
-// {{.Flag}}, {{.CountryCode}}, {{.Index}}, {{.Direction}}, {{.Speed}}, {{.DownloadSpeedMBps}}, {{.UploadSpeedMBps}}.
+// {{.Flag}}, {{.CountryCode}}, {{.Index}}, {{.Direction}}, {{.Speed}}, {{.SpeedUnit}}, {{.LatencyMs}}, {{.DownloadSpeedMBps}}, {{.UploadSpeedMBps}}.
 // If template is empty, DefaultNameTemplate is used. On execute error, falls back to default format.
-func GenerateNodeNameFromTemplate(tmpl string, countryCode string, downloadSpeed, uploadSpeed float64, nameCount map[string]int) (string, error) {
+func GenerateNodeNameFromTemplate(tmpl string, countryCode string, latency time.Duration, downloadSpeed, uploadSpeed float64, nameCount map[string]int) (string, error) {
 	if tmpl == "" {
 		tmpl = DefaultNameTemplate
 	}
@@ -49,16 +52,16 @@ func GenerateNodeNameFromTemplate(tmpl string, countryCode string, downloadSpeed
 	if err != nil {
 		return "", err
 	}
-	data := buildNodeNameData(countryCode, downloadSpeed, uploadSpeed, nameCount)
+	data := buildNodeNameData(countryCode, latency, downloadSpeed, uploadSpeed, nameCount)
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
 		// fallback to default format so caller does not double-increment nameCount
-		return fmt.Sprintf("%s %s %s | %s %sMB/s", data.Flag, data.CountryCode, data.Index, data.Direction, data.Speed), nil
+		return fmt.Sprintf("%s %s %s | %s %s%s", data.Flag, data.CountryCode, data.Index, data.Direction, data.Speed, data.SpeedUnit), nil
 	}
 	return buf.String(), nil
 }
 
-func buildNodeNameData(countryCode string, downloadSpeed, uploadSpeed float64, nameCount map[string]int) NodeNameData {
+func buildNodeNameData(countryCode string, latency time.Duration, downloadSpeed, uploadSpeed float64, nameCount map[string]int) NodeNameData {
 	flag, exists := countryFlags[strings.ToUpper(countryCode)]
 	if !exists {
 		flag = "🏳️"
@@ -66,27 +69,42 @@ func buildNodeNameData(countryCode string, downloadSpeed, uploadSpeed float64, n
 	upperCountryCode := strings.ToUpper(countryCode)
 	speed := downloadSpeed
 	direction := "⬇️"
+	speedUnit := "MB/s"
 	if downloadSpeed <= 0 {
 		speed = uploadSpeed
 		direction = "⬆️"
 	}
+	if downloadSpeed <= 0 && uploadSpeed <= 0 && latency > 0 {
+		speed = float64(latency.Milliseconds())
+		direction = "⚡"
+		speedUnit = "ms"
+	}
 	speedMBps := speed / (1024 * 1024)
+	if speedUnit == "ms" {
+		speedMBps = speed
+	}
 	count := nameCount[upperCountryCode] + 1
 	nameCount[upperCountryCode] = count
 	dlMBps := downloadSpeed / (1024 * 1024)
 	ulMBps := uploadSpeed / (1024 * 1024)
+	latencyMs := "N/A"
+	if latency > 0 {
+		latencyMs = fmt.Sprintf("%d", latency.Milliseconds())
+	}
 	return NodeNameData{
 		Flag:              flag,
 		CountryCode:       upperCountryCode,
 		Index:             fmt.Sprintf("%03d", count),
 		Direction:         direction,
 		Speed:             fmt.Sprintf("%.2f", speedMBps),
+		SpeedUnit:         speedUnit,
+		LatencyMs:         latencyMs,
 		DownloadSpeedMBps: fmt.Sprintf("%.2f", dlMBps),
 		UploadSpeedMBps:   fmt.Sprintf("%.2f", ulMBps),
 	}
 }
 
-func GenerateNodeName(countryCode string, downloadSpeed float64, uploadSpeed float64, nameCount map[string]int) string {
-	name, _ := GenerateNodeNameFromTemplate("", countryCode, downloadSpeed, uploadSpeed, nameCount)
+func GenerateNodeName(countryCode string, latency time.Duration, downloadSpeed float64, uploadSpeed float64, nameCount map[string]int) string {
+	name, _ := GenerateNodeNameFromTemplate("", countryCode, latency, downloadSpeed, uploadSpeed, nameCount)
 	return name
 }

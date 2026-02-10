@@ -47,7 +47,7 @@ var (
 	minDownloadSpeed  = flag.Float64("min-download-speed", 5, "filter download speed less than this value(unit: MB/s)")
 	minUploadSpeed    = flag.Float64("min-upload-speed", 2, "filter upload speed less than this value(unit: MB/s, full mode only)")
 	renameNodes       = flag.Bool("rename", true, "rename nodes with IP location and speed")
-	renameTemplate    = flag.String("rename-template", "", "name template for renaming (Go text/template). Placeholders: {{.Flag}}, {{.CountryCode}}, {{.Index}}, {{.Direction}}, {{.Speed}}, {{.DownloadSpeedMBps}}, {{.UploadSpeedMBps}}. Empty = default format")
+	renameTemplate    = flag.String("rename-template", "", "name template for renaming (Go text/template). Placeholders: {{.Flag}}, {{.CountryCode}}, {{.Index}}, {{.Direction}}, {{.Speed}}, {{.SpeedUnit}}, {{.LatencyMs}}, {{.DownloadSpeedMBps}}, {{.UploadSpeedMBps}}. Empty = default format")
 	fastMode          = flag.Bool("fast", false, "fast mode (alias for --speed-mode fast)")
 	versionFlag       = flag.Bool("v", false, "show version information")
 	userAgent         = flag.String("ua", "", "User-Agent for fetching config from http(s) URL (default: mihomo kernel UA, e.g. mihomo/1.10.0)")
@@ -72,7 +72,7 @@ func main() {
 	if !*fastMode {
 		requestedMode, err = speedtester.ParseSpeedMode(*speedMode)
 		if err != nil {
-			log.Fatalln("parse speed mode failed: %v", err)
+			log.Fatalln("parse speed mode failed: %s", err)
 		}
 	}
 
@@ -94,13 +94,13 @@ func main() {
 		UserAgent:        *userAgent,
 	})
 	if err != nil {
-		log.Fatalln("create speed tester failed: %v", err)
+		log.Fatalln("create speed tester failed: %s", err)
 	}
 	effectiveMode := speedTester.Mode()
 
 	allProxies, err := speedTester.LoadProxies()
 	if err != nil {
-		log.Fatalln("load proxies failed: %v", err)
+		log.Fatalln("load proxies failed: %s", err)
 	}
 
 	outputMode := output.DetermineOutputMode(output.IsTerminalFile)
@@ -110,7 +110,7 @@ func main() {
 		var err error
 		tsvWriter, err = output.NewTSVWriter(os.Stdout, effectiveMode)
 		if err != nil {
-			log.Fatalln("create TSV writer failed: %v", err)
+			log.Fatalln("create TSV writer failed: %s", err)
 		}
 	}
 
@@ -151,7 +151,7 @@ func main() {
 			tea.WithMouseAllMotion(),
 		)
 		if _, err := p.Run(); err != nil {
-			log.Fatalln("TUI failed: %v", err)
+			log.Fatalln("TUI failed: %s", err)
 		}
 
 		if !collectResults {
@@ -160,7 +160,7 @@ func main() {
 
 		err = <-saveResult
 		if err != nil {
-			log.Fatalln("save config file failed: %v", err)
+			log.Fatalln("save config file failed: %s", err)
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
 		return
@@ -172,7 +172,7 @@ func main() {
 
 		if tsvWriter != nil {
 			if err := tsvWriter.WriteRow(result, len(results)-1); err != nil {
-				log.Printf("write TSV row failed: %v", err)
+				log.Printf("write TSV row failed: %s", err)
 			}
 		}
 	})
@@ -182,7 +182,7 @@ func main() {
 	if *outputPath != "" {
 		err = saveConfig(results, effectiveMode)
 		if err != nil {
-			log.Fatalln("save config file failed: %v", err)
+			log.Fatalln("save config file failed: %s", err)
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
 	}
@@ -217,10 +217,10 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 				proxies = append(proxies, proxyConfig)
 				continue
 			}
-			name, err := ip.GenerateNodeNameFromTemplate(*renameTemplate, location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
+			name, err := ip.GenerateNodeNameFromTemplate(*renameTemplate, location.CountryCode, result.Latency, result.DownloadSpeed, result.UploadSpeed, nameCount)
 			if err != nil {
-				log.Printf("rename template parse error: %v, use default name", err)
-				name = ip.GenerateNodeName(location.CountryCode, result.DownloadSpeed, result.UploadSpeed, nameCount)
+				log.Printf("rename template parse error: %s, use default name", err)
+				name = ip.GenerateNodeName(location.CountryCode, result.Latency, result.DownloadSpeed, result.UploadSpeed, nameCount)
 			}
 			proxyConfig["name"] = name
 		}
@@ -243,7 +243,7 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 	if *gistToken != "" && *gistAddress != "" {
 		uploader := gist.NewUploader(nil)
 		if err := uploader.UpdateFile(*gistToken, *gistAddress, outputFilename, yamlData); err != nil {
-			log.Printf("update gist failed: %v", err)
+			log.Printf("update gist failed: %s", err)
 		}
 	}
 
@@ -254,7 +254,7 @@ func saveConfig(results []*speedtester.Result, mode speedtester.SpeedMode) error
 			repositoryFilePath = outputFilename
 		}
 		if err := uploader.UpdateRepoFile(*repoToken, *repoAddress, repositoryFilePath, *repoBranch, yamlData); err != nil {
-			log.Printf("update repo file failed: %v", err)
+			log.Printf("update repo file failed: %s", err)
 		}
 	}
 

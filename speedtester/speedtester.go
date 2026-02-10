@@ -220,7 +220,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
 			if err := pd.Initial(); err != nil {
-				log.Printf("initial proxy provider %s error: %v", pd.Name(), err)
+				log.Printf("initial proxy provider %s error: %s", pd.Name(), err)
 				continue
 			}
 
