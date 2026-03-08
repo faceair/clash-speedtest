@@ -225,54 +225,6 @@ func TestSortResults(t *testing.T) {
 			t.Errorf("expected latency 500ms, got %v", results[0].Latency)
 		}
 	})
-
-	t.Run("deduplicate by server and port", func(t *testing.T) {
-		results := []*speedtester.Result{
-			{
-				Latency:     200 * time.Millisecond,
-				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": 443},
-			},
-			{
-				Latency:     100 * time.Millisecond,
-				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": "443"},
-			},
-			{
-				Latency:     150 * time.Millisecond,
-				ProxyConfig: map[string]any{"server": "2.2.2.2", "port": float64(443)},
-			},
-		}
-		results = SortResults(results, speedtester.SpeedModeFast)
-		if len(results) != 2 {
-			t.Errorf("expected 2 results after deduplication, got %d", len(results))
-		}
-		if results[0].Latency != 100*time.Millisecond {
-			t.Errorf("expected lowest latency to remain after deduplication, got %v", results[0].Latency)
-		}
-		if results[1].ProxyConfig["server"] != "2.2.2.2" {
-			t.Errorf("expected different server to remain, got %v", results[1].ProxyConfig["server"])
-		}
-	})
-
-	t.Run("missing server or port is not deduplicated", func(t *testing.T) {
-		results := []*speedtester.Result{
-			{
-				Latency:     100 * time.Millisecond,
-				ProxyConfig: map[string]any{"server": "1.1.1.1"},
-			},
-			{
-				Latency:     200 * time.Millisecond,
-				ProxyConfig: map[string]any{"server": "1.1.1.1", "port": 80},
-			},
-			{
-				Latency:     300 * time.Millisecond,
-				ProxyConfig: map[string]any{"port": 80},
-			},
-		}
-		results = SortResults(results, speedtester.SpeedModeFast)
-		if len(results) != 3 {
-			t.Errorf("expected results to remain when server or port missing, got %d", len(results))
-		}
-	})
 }
 
 func TestResultFormatting(t *testing.T) {

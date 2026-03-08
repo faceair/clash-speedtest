@@ -76,3 +76,56 @@ func TestResultFormatErrors(t *testing.T) {
 		t.Fatalf("expected upload speed value to ignore error string")
 	}
 }
+
+func TestDeduplicateProxies(t *testing.T) {
+	t.Run("deduplicate by server and port", func(t *testing.T) {
+		proxies := map[string]*CProxy{
+			"proxy-a": {Config: map[string]any{"server": "1.1.1.1", "port": 443}},
+			"proxy-b": {Config: map[string]any{"server": "1.1.1.1", "port": "443"}},
+			"proxy-c": {Config: map[string]any{"server": "2.2.2.2", "port": float64(443)}},
+		}
+
+		results := deduplicateProxiesByServerPort(proxies)
+		if len(results) != 2 {
+			t.Fatalf("expected 2 proxies after deduplication, got %d", len(results))
+		}
+		if _, ok := results["proxy-c"]; !ok {
+			t.Fatalf("expected proxy-c to remain")
+		}
+		duplicateCount := 0
+		if _, ok := results["proxy-a"]; ok {
+			duplicateCount++
+		}
+		if _, ok := results["proxy-b"]; ok {
+			duplicateCount++
+		}
+		if duplicateCount != 1 {
+			t.Fatalf("expected exactly one duplicate proxy to remain, got %d", duplicateCount)
+		}
+	})
+
+	t.Run("mapped ipv6 and ipv4 are deduplicated after normalization", func(t *testing.T) {
+		proxies := map[string]*CProxy{
+			"proxy-a": {Config: map[string]any{"server": convertMappedIPv6ToIPv4("::ffff:1.1.1.1"), "port": 443}},
+			"proxy-b": {Config: map[string]any{"server": "1.1.1.1", "port": 443}},
+		}
+
+		results := deduplicateProxiesByServerPort(proxies)
+		if len(results) != 1 {
+			t.Fatalf("expected 1 proxy after deduplication, got %d", len(results))
+		}
+	})
+
+	t.Run("missing server or port is not deduplicated", func(t *testing.T) {
+		proxies := map[string]*CProxy{
+			"proxy-a": {Config: map[string]any{"server": "1.1.1.1"}},
+			"proxy-b": {Config: map[string]any{"server": "1.1.1.1", "port": 80}},
+			"proxy-c": {Config: map[string]any{"port": 80}},
+		}
+
+		results := deduplicateProxiesByServerPort(proxies)
+		if len(results) != 3 {
+			t.Fatalf("expected proxies to remain when server or port missing, got %d", len(results))
+		}
+	})
+}

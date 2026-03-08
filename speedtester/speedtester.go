@@ -297,7 +297,47 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			filteredProxies[name] = allProxies[name]
 		}
 	}
-	return filteredProxies, nil
+	return deduplicateProxiesByServerPort(filteredProxies), nil
+}
+
+func deduplicateProxiesByServerPort(proxies map[string]*CProxy) map[string]*CProxy {
+	if len(proxies) < 2 {
+		return proxies
+	}
+
+	deduplicated := make(map[string]*CProxy, len(proxies))
+	seen := make(map[string]struct{}, len(proxies))
+	for name, proxy := range proxies {
+		key, ok := buildProxyServerPortKey(proxy)
+		if ok {
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+		}
+		deduplicated[name] = proxy
+	}
+	return deduplicated
+}
+
+func buildProxyServerPortKey(proxy *CProxy) (string, bool) {
+	if proxy == nil || proxy.Config == nil {
+		return "", false
+	}
+	serverValue, serverOK := proxy.Config["server"]
+	portValue, portOK := proxy.Config["port"]
+	if !serverOK || !portOK {
+		return "", false
+	}
+	server := strings.TrimSpace(fmt.Sprintf("%v", serverValue))
+	if server == "" {
+		return "", false
+	}
+	port := strings.TrimSpace(fmt.Sprintf("%v", portValue))
+	if port == "" {
+		return "", false
+	}
+	return fmt.Sprintf("%s:%s", server, port), true
 }
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, tester func(result *Result)) {
