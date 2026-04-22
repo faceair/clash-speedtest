@@ -27,13 +27,25 @@ func TestHelpViewShowsQuitAndDetailKeys(t *testing.T) {
 	if !strings.Contains(helpView, "q/ctrl+c") {
 		t.Fatalf("expected help to include quit shortcut, got %q", helpView)
 	}
+	if !strings.Contains(helpView, "retest all") {
+		t.Fatalf("expected help to include retest-all shortcut, got %q", helpView)
+	}
 	if strings.Contains(helpView, "esc") {
 		t.Fatalf("expected help to hide detail shortcut when detail is closed, got %q", helpView)
+	}
+	if strings.Contains(helpView, "retest node") {
+		t.Fatalf("expected help to hide retest-node shortcut when detail is closed, got %q", helpView)
 	}
 
 	model.toggleDetail(result)
 	helpView = model.help.view()
 	if !strings.Contains(helpView, "esc") {
 		t.Fatalf("expected help to include detail shortcut when detail is visible, got %q", helpView)
+	}
+	if !strings.Contains(helpView, "retest node") {
+		t.Fatalf("expected help to include retest-node shortcut when detail is visible, got %q", helpView)
+	}
+	if strings.Contains(helpView, "retest all") {
+		t.Fatalf("expected help to hide retest-all shortcut when detail is visible, got %q", helpView)
 	}
 }

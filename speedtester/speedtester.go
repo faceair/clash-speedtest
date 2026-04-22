@@ -342,8 +342,12 @@ func buildProxyServerPortKey(proxy *CProxy) (string, bool) {
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, tester func(result *Result)) {
 	for name, proxy := range proxies {
-		tester(st.testProxy(name, proxy))
+		tester(st.TestProxy(name, proxy))
 	}
+}
+
+func (st *SpeedTester) TestProxy(name string, proxy *CProxy) *Result {
+	return st.testProxy(name, proxy)
 }
 
 type Result struct {

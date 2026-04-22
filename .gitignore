@@ -1,3 +1,5 @@
 .vscode
 *.exe
 clash-speedtest
+.gocache
+.gomodcache

@@ -55,6 +55,9 @@ type tuiModel struct {
 	flushScheduled bool
 	detailHeight   int
 	perf           *perfTracker
+	retestAll      func(chan<- *speedtester.Result)
+	retestOne      func(string, chan<- *speedtester.Result)
+	retestingName  string
 }
 
 const (
@@ -126,7 +129,16 @@ func NewTUIModel(mode speedtester.SpeedMode, totalProxies int, resultChannel cha
 		flushScheduled: false,
 		detailHeight:   0,
 		perf:           newPerfTracker(),
+		retestingName:  "",
 	}
+}
+
+func (m *tuiModel) SetRetestCallbacks(
+	retestAll func(chan<- *speedtester.Result),
+	retestOne func(string, chan<- *speedtester.Result),
+) {
+	m.retestAll = retestAll
+	m.retestOne = retestOne
 }
 
 // Init initializes the TUI model
@@ -141,7 +153,7 @@ func (m tuiModel) Init() tea.Cmd {
 func (m tuiModel) waitForResult() tea.Cmd {
 	return func() tea.Msg {
 		result, ok := <-m.resultChannel
-		if !ok {
+		if !ok || result == nil {
 			return doneMsg{}
 		}
 		return resultMsg{result: result}
@@ -181,6 +193,23 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
+		case "r":
+			if m.testing {
+				return m, nil
+			}
+			if m.detailVisible && m.detailResult != nil {
+				if m.retestOne == nil {
+					return m, nil
+				}
+				m.testing = true
+				m.retestingName = m.detailResult.ProxyName
+				return m, tea.Batch(m.runRetestOneCmd(m.detailResult.ProxyName), m.waitForResult())
+			}
+			if m.retestAll == nil {
+				return m, nil
+			}
+			m.beginFullRetest()
+			return m, tea.Batch(m.progress.SetPercent(0), m.runRetestAllCmd(), m.waitForResult())
 		}
 
 		m.table, cmd = m.table.Update(msg)
@@ -229,11 +258,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case resultMsg:
-		m.currentProxy++
-		m.results = append(m.results, msg.result)
-		m.recordSequence(msg.result)
+		if m.retestingName != "" {
+			m.replaceRetestedResult(msg.result)
+		} else {
+			m.currentProxy++
+			m.results = append(m.results, msg.result)
+			m.recordSequence(msg.result)
+		}
 		m.resultsDirty = true
-		progressCmd := m.progress.SetPercent(float64(m.currentProxy) / float64(m.totalProxies))
+		percent := 0.0
+		if m.totalProxies > 0 {
+			percent = float64(m.currentProxy) / float64(m.totalProxies)
+		}
+		progressCmd := m.progress.SetPercent(percent)
 		cmds := []tea.Cmd{progressCmd, m.waitForResult()}
 		if !m.flushScheduled {
 			m.flushScheduled = true
@@ -244,6 +281,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case doneMsg:
 		m.testing = false
 		m.flushScheduled = false
+		m.retestingName = ""
 		m.flushResultsIfDirty()
 		progressCmd := m.progress.SetPercent(1.0)
 		return m, progressCmd
@@ -275,6 +313,62 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd = progressCmd
 
 	return m, cmd
+}
+
+func (m *tuiModel) beginFullRetest() {
+	m.currentProxy = 0
+	m.results = make([]*speedtester.Result, 0, m.totalProxies)
+	m.sequence = make(map[*speedtester.Result]int)
+	m.nextSequence = 0
+	m.testing = true
+	m.startTime = time.Now()
+	m.resultsDirty = false
+	m.flushScheduled = false
+	m.retestingName = ""
+	m.detailVisible = false
+	m.detailResult = nil
+	m.detailHeight = 0
+	m.selectedIndex = -1
+	m.help.setDetailVisible(false)
+	m.table.SetRows([]table.Row{})
+	m.table.SetCursor(0)
+	m.updateTableLayout()
+}
+
+func (m tuiModel) runRetestAllCmd() tea.Cmd {
+	return func() tea.Msg {
+		m.retestAll(m.resultChannel)
+		return nil
+	}
+}
+
+func (m tuiModel) runRetestOneCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		m.retestOne(name, m.resultChannel)
+		return nil
+	}
+}
+
+func (m *tuiModel) replaceRetestedResult(result *speedtester.Result) {
+	for i, existing := range m.results {
+		if existing.ProxyName != m.retestingName {
+			continue
+		}
+		m.results[i] = result
+		if seq, ok := m.sequence[existing]; ok {
+			m.sequence[result] = seq
+		} else {
+			m.recordSequence(result)
+		}
+		delete(m.sequence, existing)
+		if m.detailResult == existing {
+			m.detailResult = result
+		}
+		return
+	}
+	m.currentProxy++
+	m.results = append(m.results, result)
+	m.recordSequence(result)
 }
 
 // View renders the TUI

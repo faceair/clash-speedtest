@@ -14,6 +14,8 @@ type helpState struct {
 
 type helpKeyMap struct {
 	Quit        key.Binding
+	RetestAll   key.Binding
+	RetestOne   key.Binding
 	CloseDetail key.Binding
 	Table       table.KeyMap
 }
@@ -26,6 +28,14 @@ func newHelpState(tableKeys table.KeyMap) helpState {
 			Quit: key.NewBinding(
 				key.WithKeys("q", "ctrl+c"),
 				key.WithHelp("q/ctrl+c", "quit"),
+			),
+			RetestAll: key.NewBinding(
+				key.WithKeys("r"),
+				key.WithHelp("r", "retest all"),
+			),
+			RetestOne: key.NewBinding(
+				key.WithKeys("r"),
+				key.WithHelp("r", "retest node"),
 			),
 			CloseDetail: key.NewBinding(
 				key.WithKeys("esc"),
@@ -43,6 +53,8 @@ func (h *helpState) setWidth(width int) {
 
 func (h *helpState) setDetailVisible(visible bool) {
 	h.keyMap.CloseDetail.SetEnabled(visible)
+	h.keyMap.RetestOne.SetEnabled(visible)
+	h.keyMap.RetestAll.SetEnabled(!visible)
 }
 
 func (h helpState) view() string {
@@ -61,6 +73,8 @@ func (km helpKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		km.Table.LineUp,
 		km.Table.LineDown,
+		km.RetestAll,
+		km.RetestOne,
 		km.Quit,
 		km.CloseDetail,
 	}
@@ -70,6 +84,6 @@ func (km helpKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{km.Table.LineUp, km.Table.LineDown, km.Table.GotoTop, km.Table.GotoBottom},
 		{km.Table.PageUp, km.Table.PageDown, km.Table.HalfPageUp, km.Table.HalfPageDown},
-		{km.CloseDetail, km.Quit},
+		{km.RetestAll, km.RetestOne, km.CloseDetail, km.Quit},
 	}
 }

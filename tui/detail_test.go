@@ -178,6 +178,9 @@ func TestBuildDetailContentDownloadOnly(t *testing.T) {
 	if strings.Contains(content, result.UploadError) {
 		t.Fatalf("expected download-only detail to omit upload error, got %q", content)
 	}
+	if !strings.Contains(content, "Press R to retest this node.") {
+		t.Fatalf("expected detail to include retest hint, got %q", content)
+	}
 }
 
 func TestDetailPanelHeightUpdatesOnSelectionChange(t *testing.T) {

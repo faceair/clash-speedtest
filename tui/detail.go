@@ -98,7 +98,7 @@ func buildDetailContent(result *speedtester.Result, width int, mode speedtester.
 			lines = appendWrappedValue(lines, "Upload Error:", result.FormatUploadError(), width)
 		}
 	}
-	lines = append(lines, "", "Press ESC to close details.")
+	lines = append(lines, "", "Press R to retest this node. Press ESC to close details.")
 	return strings.Join(lines, "\n")
 }
 
