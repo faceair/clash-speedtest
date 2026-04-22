@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,7 +73,7 @@ func main() {
 	if !*fastMode {
 		requestedMode, err = speedtester.ParseSpeedMode(*speedMode)
 		if err != nil {
-			log.Fatalln("parse speed mode failed: %s", err)
+			log.Fatalf("parse speed mode failed: %v", err)
 		}
 	}
 
@@ -94,13 +95,13 @@ func main() {
 		UserAgent:        *userAgent,
 	})
 	if err != nil {
-		log.Fatalln("create speed tester failed: %s", err)
+		log.Fatalf("create speed tester failed: %v", err)
 	}
 	effectiveMode := speedTester.Mode()
 
 	allProxies, err := speedTester.LoadProxies()
 	if err != nil {
-		log.Fatalln("load proxies failed: %s", err)
+		log.Fatalf("load proxies failed: %v", err)
 	}
 
 	outputMode := output.DetermineOutputMode(output.IsTerminalFile)
@@ -110,7 +111,7 @@ func main() {
 		var err error
 		tsvWriter, err = output.NewTSVWriter(os.Stdout, effectiveMode)
 		if err != nil {
-			log.Fatalln("create TSV writer failed: %s", err)
+			log.Fatalf("create TSV writer failed: %v", err)
 		}
 	}
 
@@ -120,47 +121,110 @@ func main() {
 		collectResults := *outputPath != ""
 		// Run TUI for Interactive mode
 		resultChannel := make(chan *speedtester.Result, len(allProxies))
-		resultsDone := make(chan struct{})
-		saveResult := make(chan error, 1)
-
-		// Start testing in goroutine to send results to channel
-		go func() {
-			speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
-				if collectResults {
-					results = append(results, result)
+		var resultsMu sync.Mutex
+		var activeRunDone <-chan struct{}
+		setActiveRun := func(done <-chan struct{}) {
+			resultsMu.Lock()
+			activeRunDone = done
+			resultsMu.Unlock()
+		}
+		storeFullRunResults := func(runResults []*speedtester.Result) {
+			if !collectResults {
+				return
+			}
+			resultsMu.Lock()
+			results = runResults
+			resultsMu.Unlock()
+		}
+		replaceStoredResult := func(result *speedtester.Result) {
+			if !collectResults {
+				return
+			}
+			resultsMu.Lock()
+			defer resultsMu.Unlock()
+			for i, existing := range results {
+				if existing.ProxyName == result.ProxyName {
+					results[i] = result
+					return
 				}
-				resultChannel <- result
-			})
-			close(resultChannel)
-			close(resultsDone)
-		}()
-
-		if collectResults {
-			// Save results once all tests finish, without blocking the TUI loop.
+			}
+			results = append(results, result)
+		}
+		startTestRun := func(proxies map[string]*speedtester.CProxy, replaceAll bool) {
+			done := make(chan struct{})
+			setActiveRun(done)
 			go func() {
-				<-resultsDone
-				results = output.SortResults(results, effectiveMode)
-				saveResult <- saveConfig(results, effectiveMode)
+				defer close(done)
+				runResults := make([]*speedtester.Result, 0, len(proxies))
+				if len(proxies) == 1 {
+					for name, proxy := range proxies {
+						result := speedTester.TestProxy(name, proxy)
+						if replaceAll {
+							runResults = append(runResults, result)
+						} else {
+							replaceStoredResult(result)
+						}
+						resultChannel <- result
+					}
+				} else {
+					speedTester.TestProxies(proxies, func(result *speedtester.Result) {
+						if replaceAll {
+							runResults = append(runResults, result)
+						} else {
+							replaceStoredResult(result)
+						}
+						resultChannel <- result
+					})
+				}
+				if replaceAll {
+					storeFullRunResults(runResults)
+				}
+				resultChannel <- nil
 			}()
 		}
 
+		startTestRun(allProxies, true)
+
 		// Create and run TUI
+		model := tui.NewTUIModel(effectiveMode, len(allProxies), resultChannel)
+		model.SetRetestCallbacks(
+			func(_ chan<- *speedtester.Result) {
+				startTestRun(allProxies, true)
+			},
+			func(name string, out chan<- *speedtester.Result) {
+				proxy, ok := allProxies[name]
+				if !ok {
+					out <- nil
+					return
+				}
+				startTestRun(map[string]*speedtester.CProxy{name: proxy}, false)
+			},
+		)
 		p := tea.NewProgram(
-			tui.NewTUIModel(effectiveMode, len(allProxies), resultChannel),
+			model,
 			tea.WithAltScreen(),
 			tea.WithMouseAllMotion(),
 		)
 		if _, err := p.Run(); err != nil {
-			log.Fatalln("TUI failed: %s", err)
+			log.Fatalf("TUI failed: %v", err)
 		}
 
 		if !collectResults {
 			return
 		}
 
-		err = <-saveResult
+		resultsMu.Lock()
+		done := activeRunDone
+		resultsMu.Unlock()
+		if done != nil {
+			<-done
+		}
+		resultsMu.Lock()
+		results = output.SortResults(results, effectiveMode)
+		resultsMu.Unlock()
+		err = saveConfig(results, effectiveMode)
 		if err != nil {
-			log.Fatalln("save config file failed: %s", err)
+			log.Fatalf("save config file failed: %v", err)
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
 		return
@@ -182,7 +246,7 @@ func main() {
 	if *outputPath != "" {
 		err = saveConfig(results, effectiveMode)
 		if err != nil {
-			log.Fatalln("save config file failed: %s", err)
+			log.Fatalf("save config file failed: %v", err)
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
 	}

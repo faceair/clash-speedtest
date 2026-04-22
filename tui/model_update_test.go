@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/faceair/clash-speedtest/speedtester"
 )
 
@@ -209,5 +211,147 @@ func TestTUIModelUpdateFastMode(t *testing.T) {
 	}
 	if updatedModel.(tuiModel).results[2] != result1 {
 		t.Error("Expected third result to be result1")
+	}
+}
+
+func TestTUIModelRetestAllResetsState(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 4)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 2, resultChannel)
+	model.testing = false
+	model.currentProxy = 2
+	model.progress.SetPercent(1.0)
+	model.results = []*speedtester.Result{
+		{ProxyName: "Proxy 1", ProxyType: "SS", ProxyConfig: map[string]any{}},
+		{ProxyName: "Proxy 2", ProxyType: "Trojan", ProxyConfig: map[string]any{}},
+	}
+	model.updateTableRows()
+	called := false
+	model.SetRetestCallbacks(
+		func(out chan<- *speedtester.Result) {
+			called = true
+			out <- nil
+		},
+		nil,
+	)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	updatedModel := updated.(tuiModel)
+	if cmd == nil {
+		t.Fatalf("expected retest-all to return a command")
+	}
+	progressCmd := updatedModel.progress.SetPercent(0)
+	progressUpdated, _ := updatedModel.progress.Update(progressCmd())
+	updatedModel.progress = progressUpdated.(progress.Model)
+	updatedModel.runRetestAllCmd()()
+	if !called {
+		t.Fatalf("expected retest-all callback to run")
+	}
+	if !updatedModel.testing {
+		t.Fatalf("expected model to enter testing state")
+	}
+	if updatedModel.currentProxy != 0 {
+		t.Fatalf("expected currentProxy reset, got %d", updatedModel.currentProxy)
+	}
+	if len(updatedModel.results) != 0 {
+		t.Fatalf("expected results to clear, got %d", len(updatedModel.results))
+	}
+	if updatedModel.selectedIndex != -1 {
+		t.Fatalf("expected selection to reset, got %d", updatedModel.selectedIndex)
+	}
+	if updatedModel.progress.Percent() != 0 {
+		t.Fatalf("expected progress percent reset to 0, got %f", updatedModel.progress.Percent())
+	}
+}
+
+func TestTUIModelRetestOneReplacesExistingResult(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 4)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 2, resultChannel)
+	oldSlow := &speedtester.Result{
+		ProxyName:     "Slow",
+		ProxyType:     "SS",
+		Latency:       100 * time.Millisecond,
+		DownloadSpeed: 2 * 1024 * 1024,
+		ProxyConfig:   map[string]any{},
+	}
+	oldFast := &speedtester.Result{
+		ProxyName:     "Fast",
+		ProxyType:     "Trojan",
+		Latency:       200 * time.Millisecond,
+		DownloadSpeed: 10 * 1024 * 1024,
+		ProxyConfig:   map[string]any{},
+	}
+	model.results = []*speedtester.Result{oldFast, oldSlow}
+	model.recordSequence(oldFast)
+	model.recordSequence(oldSlow)
+	model.testing = false
+	model.detailVisible = true
+	model.detailResult = oldSlow
+	model.selectedIndex = 1
+	model.updateTableRows()
+
+	newSlow := &speedtester.Result{
+		ProxyName:     "Slow",
+		ProxyType:     "SS",
+		Latency:       90 * time.Millisecond,
+		DownloadSpeed: 20 * 1024 * 1024,
+		ProxyConfig:   map[string]any{},
+	}
+	calledName := ""
+	model.SetRetestCallbacks(nil, func(name string, out chan<- *speedtester.Result) {
+		calledName = name
+		out <- newSlow
+		out <- nil
+	})
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	updatedModel := updated.(tuiModel)
+	if cmd == nil {
+		t.Fatalf("expected retest-one to return a command")
+	}
+	updatedModel.runRetestOneCmd(updatedModel.retestingName)()
+	if calledName != "Slow" {
+		t.Fatalf("expected retest-one callback to receive selected node, got %q", calledName)
+	}
+
+	updated, _ = updatedModel.Update(resultMsg{result: newSlow})
+	updatedModel = updated.(tuiModel)
+	updated, _ = updatedModel.Update(flushResultsMsg{})
+	updatedModel = updated.(tuiModel)
+
+	if len(updatedModel.results) != 2 {
+		t.Fatalf("expected result count to stay the same, got %d", len(updatedModel.results))
+	}
+	if updatedModel.results[0] != newSlow {
+		t.Fatalf("expected retested node to be resorted to first position")
+	}
+	if updatedModel.detailResult != newSlow {
+		t.Fatalf("expected detail result to follow replacement")
+	}
+	if updatedModel.selectedIndex != 0 {
+		t.Fatalf("expected selection to follow resorted node, got %d", updatedModel.selectedIndex)
+	}
+	if updatedModel.currentProxy != 0 {
+		t.Fatalf("expected currentProxy to remain unchanged during single retest, got %d", updatedModel.currentProxy)
+	}
+}
+
+func TestTUIModelIgnoresRetestWhileTesting(t *testing.T) {
+	resultChannel := make(chan *speedtester.Result, 1)
+	model := NewTUIModel(speedtester.SpeedModeDownload, 1, resultChannel)
+	called := false
+	model.SetRetestCallbacks(
+		func(chan<- *speedtester.Result) { called = true },
+		func(string, chan<- *speedtester.Result) { called = true },
+	)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if called {
+		t.Fatalf("expected retest callbacks not to run while testing")
+	}
+	if cmd != nil {
+		t.Fatalf("expected no command when retest is ignored")
+	}
+	if !updated.(tuiModel).testing {
+		t.Fatalf("expected testing state to remain true")
 	}
 }
