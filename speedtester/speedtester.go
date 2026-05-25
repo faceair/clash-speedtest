@@ -18,6 +18,7 @@ import (
 
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
+	"github.com/metacubex/mihomo/common/convert"
 	"github.com/metacubex/mihomo/constant"
 	"gopkg.in/yaml.v2"
 )
@@ -193,7 +194,17 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		rawCfg := &RawConfig{
 			Proxies: []map[string]any{},
 		}
-		if err := yaml.Unmarshal(body, rawCfg); err != nil {
+		err = yaml.Unmarshal(body, rawCfg)
+
+		// 如果仍然解析失败，或者解析出来的 proxies 和 providers 都为空，尝试将其作为 V2Ray 节点列表（ss://, vmess:// 等）解析
+		if err != nil || (len(rawCfg.Proxies) == 0 && len(rawCfg.Providers) == 0) {
+			if proxies, v2rayErr := convert.ConvertsV2Ray(body); v2rayErr == nil {
+				rawCfg.Proxies = proxies
+				err = nil
+			}
+		}
+
+		if err != nil {
 			return nil, fmt.Errorf("unable to parse config at path %s: %w, body: %s", configPath, err, body)
 		}
 		proxies := make(map[string]*CProxy)
