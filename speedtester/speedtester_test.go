@@ -85,7 +85,7 @@ func TestDeduplicateProxies(t *testing.T) {
 			"proxy-c": {Config: map[string]any{"server": "2.2.2.2", "port": float64(443)}},
 		}
 
-		results := deduplicateProxiesByServerPort(proxies)
+		results := deduplicateProxies(proxies)
 		if len(results) != 2 {
 			t.Fatalf("expected 2 proxies after deduplication, got %d", len(results))
 		}
@@ -104,13 +104,41 @@ func TestDeduplicateProxies(t *testing.T) {
 		}
 	})
 
+	t.Run("SOCKS5 usernames distinguish nodes sharing an endpoint", func(t *testing.T) {
+		socksProxy := func(username any) *CProxy {
+			return &CProxy{Config: map[string]any{
+				"type": "socks5", "server": "127.0.0.1", "port": 11080, "username": username,
+			}}
+		}
+		proxies := map[string]*CProxy{
+			"node-a":           socksProxy("node_a"),
+			"node-a-duplicate": socksProxy("node_a"),
+			"node-b":           socksProxy("node_b"),
+			"numeric-user":     socksProxy(123),
+			"quoted-user":      socksProxy("123"),
+		}
+
+		results := deduplicateProxies(proxies)
+		if len(results) != 3 {
+			t.Fatalf("expected 3 distinct SOCKS5 users, got %d", len(results))
+		}
+		if _, ok := results["node-b"]; !ok {
+			t.Fatal("expected the node with a different username to remain")
+		}
+		_, numericUser := results["numeric-user"]
+		_, quotedUser := results["quoted-user"]
+		if numericUser == quotedUser {
+			t.Fatal("expected the numeric username and its quoted form to deduplicate")
+		}
+	})
+
 	t.Run("mapped ipv6 and ipv4 are deduplicated after normalization", func(t *testing.T) {
 		proxies := map[string]*CProxy{
 			"proxy-a": {Config: map[string]any{"server": convertMappedIPv6ToIPv4("::ffff:1.1.1.1"), "port": 443}},
 			"proxy-b": {Config: map[string]any{"server": "1.1.1.1", "port": 443}},
 		}
 
-		results := deduplicateProxiesByServerPort(proxies)
+		results := deduplicateProxies(proxies)
 		if len(results) != 1 {
 			t.Fatalf("expected 1 proxy after deduplication, got %d", len(results))
 		}
@@ -123,7 +151,7 @@ func TestDeduplicateProxies(t *testing.T) {
 			"proxy-c": {Config: map[string]any{"port": 80}},
 		}
 
-		results := deduplicateProxiesByServerPort(proxies)
+		results := deduplicateProxies(proxies)
 		if len(results) != 3 {
 			t.Fatalf("expected proxies to remain when server or port missing, got %d", len(results))
 		}

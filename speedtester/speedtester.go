@@ -18,6 +18,7 @@ import (
 
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/provider"
+	"github.com/metacubex/mihomo/common/structure"
 	"github.com/metacubex/mihomo/constant"
 	"gopkg.in/yaml.v2"
 )
@@ -297,18 +298,18 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			filteredProxies[name] = allProxies[name]
 		}
 	}
-	return deduplicateProxiesByServerPort(filteredProxies), nil
+	return deduplicateProxies(filteredProxies), nil
 }
 
-func deduplicateProxiesByServerPort(proxies map[string]*CProxy) map[string]*CProxy {
+func deduplicateProxies(proxies map[string]*CProxy) map[string]*CProxy {
 	if len(proxies) < 2 {
 		return proxies
 	}
 
 	deduplicated := make(map[string]*CProxy, len(proxies))
-	seen := make(map[string]struct{}, len(proxies))
+	seen := make(map[proxyDedupKey]struct{}, len(proxies))
 	for name, proxy := range proxies {
-		key, ok := buildProxyServerPortKey(proxy)
+		key, ok := buildProxyDedupKey(proxy)
 		if ok {
 			if _, exists := seen[key]; exists {
 				continue
@@ -320,24 +321,42 @@ func deduplicateProxiesByServerPort(proxies map[string]*CProxy) map[string]*CPro
 	return deduplicated
 }
 
-func buildProxyServerPortKey(proxy *CProxy) (string, bool) {
+type proxyDedupKey struct {
+	serverPort    string
+	socksUsername string
+}
+
+func buildProxyDedupKey(proxy *CProxy) (proxyDedupKey, bool) {
 	if proxy == nil || proxy.Config == nil {
-		return "", false
+		return proxyDedupKey{}, false
 	}
 	serverValue, serverOK := proxy.Config["server"]
 	portValue, portOK := proxy.Config["port"]
 	if !serverOK || !portOK {
-		return "", false
+		return proxyDedupKey{}, false
 	}
 	server := strings.TrimSpace(fmt.Sprintf("%v", serverValue))
 	if server == "" {
-		return "", false
+		return proxyDedupKey{}, false
 	}
 	port := strings.TrimSpace(fmt.Sprintf("%v", portValue))
 	if port == "" {
-		return "", false
+		return proxyDedupKey{}, false
 	}
-	return fmt.Sprintf("%s:%s", server, port), true
+
+	key := proxyDedupKey{serverPort: fmt.Sprintf("%s:%s", server, port)}
+	if proxy.Config["type"] == "socks5" {
+		// A SOCKS5 listener can route different usernames to different nodes.
+		var auth struct {
+			Username string `proxy:"username,omitempty"`
+		}
+		decoder := structure.NewDecoder(structure.Option{TagName: "proxy", WeaklyTypedInput: true})
+		if err := decoder.Decode(proxy.Config, &auth); err != nil {
+			return proxyDedupKey{}, false
+		}
+		key.socksUsername = auth.Username
+	}
+	return key, true
 }
 
 func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, tester func(result *Result)) {
